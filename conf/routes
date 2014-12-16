@@ -3,7 +3,12 @@
 # ~~~~
 
 # Home page
-GET     /                           controllers.Application.index
+GET     /                                      controllers.Application.index
 
-# Map static resources from the /public folder to the /assets URL path
-GET     /assets/*file               controllers.Assets.at(path="/public", file)
+# Map static files
+GET     /javascripts/*file                     controllers.Assets.at(path="/public/javascripts", file)
+GET     /images/*file                          controllers.Assets.at(path="/public/images", file)
+GET     /stylesheets/*file                     controllers.Assets.at(path="/public/stylesheets", file)
+
+# Map files for epiceditor
+GET     /epiceditor/*file                      controllers.Assets.at(path="/public/epiceditor", file)
