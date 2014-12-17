@@ -5,7 +5,7 @@ $(document).ready(function() {
       basePath: 'epiceditor',
       clientSideStorage: true,
       localStorageName: 'epiceditor',
-      useNativeFullscreen: false,
+      useNativeFullscreen: true,
       parser: marked,
       file: {
         name: 'epiceditor',

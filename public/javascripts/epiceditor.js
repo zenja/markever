@@ -710,18 +710,18 @@
         return;
       }
 
-      if (nativeFs) {
-        if (nativeFsWebkit) {
-          el.webkitRequestFullScreen();
-          wait = 750;
-        }
-        else if (nativeFsMoz) {
-          el.mozRequestFullScreen();
-        }
-        else if (nativeFsW3C) {
-          el.requestFullscreen();
-        }
-      }
+//      if (nativeFs) {
+//        if (nativeFsWebkit) {
+//          el.webkitRequestFullScreen();
+//          wait = 750;
+//        }
+//        else if (nativeFsMoz) {
+//          el.mozRequestFullScreen();
+//        }
+//        else if (nativeFsW3C) {
+//          el.requestFullscreen();
+//        }
+//      }
 
       _isInEdit = self.is('edit');
 
@@ -839,27 +839,27 @@
       // native fs callback from calling this function again
       self._eeState.fullscreen = false;
 
-      if (!nativeFs) {
-        document.body.style.overflow = 'auto';
-      }
-      else {
-        if (nativeFsWebkit) {
-          document.webkitCancelFullScreen();
-        }
-        else if (nativeFsMoz) {
-          document.mozCancelFullScreen();
-        }
-        else if (nativeFsW3C) {
-          document.exitFullscreen();
-        }
-      }
-
-      if (_isInEdit) {
-        self.edit();
-      }
-      else {
-        self.preview();
-      }
+//      if (!nativeFs) {
+//        document.body.style.overflow = 'auto';
+//      }
+//      else {
+//        if (nativeFsWebkit) {
+//          document.webkitCancelFullScreen();
+//        }
+//        else if (nativeFsMoz) {
+//          document.mozCancelFullScreen();
+//        }
+//        else if (nativeFsW3C) {
+//          document.exitFullscreen();
+//        }
+//      }
+//
+//      if (_isInEdit) {
+//        self.edit();
+//      }
+//      else {
+//        self.preview();
+//      }
 
       self.reflow();
 
