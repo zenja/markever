@@ -10,7 +10,7 @@ $ ->
         alert(marked(editor.getValue()))
 
     # auto-generate html when editing markdown
-#    $("#md_editor_div").keydown ->
-#        $("#md_html_div").html(marked(editor.getValue()))
     editor.on "change", ->
         $("#md_html_div").html(marked(editor.getValue()))
+        $('pre code').each (i, block) ->
+            hljs.highlightBlock(block)
