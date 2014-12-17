@@ -1,0 +1,25 @@
+#md_editor_div {
+    position: absolute;
+    left: 0px;
+    width: 50%;
+    height: 80%;
+    overflow: scroll;
+}
+
+#md_html_div {
+    position: absolute;
+    right: 0px;
+    width: 50%;
+    height: 100%;
+    background-color: #eee;
+    padding-left: 10px;
+    overflow: scroll;
+}
+
+#footer_div {
+    position: absolute;
+    bottom: 0px;
+    width: 100%;
+    height: 15%;
+    background-color: #aaffff;
+}

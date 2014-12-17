@@ -1,27 +1,39 @@
-@(title: String, message: String)
+@(title: String)
 
 <!DOCTYPE html>
 
 <html>
 <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>@title</title>
+
+    <link rel="stylesheet" media="screen" href="@routes.Assets.at("/public/stylesheets", "bootstrap.min.css")">
     <link rel="stylesheet" media="screen" href="@routes.Assets.at("/public/stylesheets", "main.css")">
     <link rel="shortcut icon" type="image/png" href="@routes.Assets.at("/public/images", "favicon.png")">
-    <script src="@routes.Assets.at("/public/javascripts", "jquery-1.11.0.min.js")" type="text/javascript"></script>
-    <script src="@routes.Assets.at("/public/javascripts", "marked.min.js")" type="text/javascript"></script>
-    <!--<script src="@routes.Assets.at("/public/javascripts", "xml-parser.js")" type="text/javascript"></script>-->
-    <!--<script src="@routes.Assets.at("/public/javascripts", "xml-writer.js")" type="text/javascript"></script>-->
-    <!--<script src="@routes.Assets.at("/public/javascripts", "enml.js")" type="text/javascript"></script>-->
-    <!--<script src="@routes.Assets.at("/public/javascripts", "epiceditor.js")" type="text/javascript"></script>-->
-    <script src="@routes.Assets.at("/public/javascripts", "app.js")" type="text/javascript"></script>
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+    <!--[if lt IE 9]>
+        <script src="https://oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+        <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
 </head>
 <body>
-    <p>@message</p>
-    <div id="md_editor_div">
-        <textarea name="" id="md_editor_textarea" cols="30" rows="10"></textarea>
-    </div>
+    <!--<div id="md_wrapper">-->
+    <div id="md_editor_div"></div>
     <div id="md_html_div">
     </div>
-    <p><a id="show_html" href="#">show html</a></p>
+    <!--</div>-->
+    <div id="footer_div">
+        <p><a id="show_html" href="#">show html</a></p>
+    </div>
+
+    <script src="@routes.Assets.at("/public/javascripts", "jquery-1.11.0.min.js")" type="text/javascript"></script>
+    <script src="@routes.Assets.at("/public/javascripts", "marked.min.js")" type="text/javascript"></script>
+    <script src="@routes.Assets.at("/public/javascripts", "ace.min.js")" type="text/javascript"></script>
+    <script src="@routes.Assets.at("/public/javascripts", "mode-markdown.js")" type="text/javascript"></script>
+    <script src="@routes.Assets.at("/public/javascripts", "app.js")" type="text/javascript"></script>
 </body>
 </html>
