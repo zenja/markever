@@ -10,5 +10,3 @@ GET     /javascripts/*file                     controllers.Assets.at(path="/publ
 GET     /images/*file                          controllers.Assets.at(path="/public/images", file)
 GET     /stylesheets/*file                     controllers.Assets.at(path="/public/stylesheets", file)
 
-# Map files for epiceditor
-GET     /epiceditor/*file                      controllers.Assets.at(path="/public/epiceditor", file)
