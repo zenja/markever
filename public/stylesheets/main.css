@@ -10,7 +10,7 @@
     position: absolute;
     right: 0px;
     width: 50%;
-    height: 100%;
+    height: 80%;
     background-color: #eee;
     padding-left: 10px;
     overflow: scroll;
@@ -20,6 +20,7 @@
     position: absolute;
     bottom: 0px;
     width: 100%;
-    height: 15%;
+    height: 10%;
+    overflow: scroll;
     background-color: #aaffff;
 }
