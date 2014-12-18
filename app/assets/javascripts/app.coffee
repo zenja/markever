@@ -14,6 +14,8 @@ $ ->
         $("#md_html_div").html(marked(editor.getValue()))
         $('pre code').each (i, block) ->
             hljs.highlightBlock(block)
+        # render Latax
+        MathJax.Hub.Queue(["Typeset", MathJax.Hub, $("#md_html_div").get(0)])
 
     # sync scroll between two columns
     # check: http://stackoverflow.com/questions/18952623/synchronized-scrolling-using-jquery
