@@ -3,10 +3,27 @@
 # ~~~~
 
 # Home page
-GET     /                                      controllers.Application.index
+GET     /                           controllers.Application.index
+
+# OAuth testing page
+GET     /start-oauth                controllers.Application.start_oauth
+
+# Clear sessions
+GET     /clear                      controllers.Application.clear
 
 # Map static files
-GET     /javascripts/*file                     controllers.Assets.at(path="/public/javascripts", file)
-GET     /images/*file                          controllers.Assets.at(path="/public/images", file)
-GET     /stylesheets/*file                     controllers.Assets.at(path="/public/stylesheets", file)
+GET     /javascripts/*file          controllers.Assets.at(path="/public/javascripts", file)
+GET     /images/*file               controllers.Assets.at(path="/public/images", file)
+GET     /stylesheets/*file          controllers.Assets.at(path="/public/stylesheets", file)
 
+# OAuth to Evernote
+GET     /authenticate               controllers.Evernote.authenticate
+GET     /auth                       controllers.Evernote.authenticate
+
+# Play with Evernote
+GET     /play-evernote              controllers.Application.play_evernote
+
+# Service APIs
+#GET     /api/v1/notes
+#GET     /api/v1/notes/:guid
+POST    /api/v1/notes               controllers.Evernote.createNote

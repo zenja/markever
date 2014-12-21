@@ -1,0 +1,4 @@
+oauth.consumer_key=<your-consumer-key>
+oauth.consumer_secret=<your-consumer-secret>
+oauth.callback_url=http://localhost:9000/auth
+oauth.evernote_base_url=https://sandbox.evernote.com

@@ -1,0 +1,11 @@
+@()(implicit session: play.api.mvc.Session) 
+@import helper._
+
+@main(title = "Play with Evernote!") {
+        <form action="" method="POST">
+            <p>Content to post:</p>
+            <textarea name="content" cols="80" rows="50"></textarea>
+            <br />
+            <input type="submit" value="post!" />
+        </form>
+}

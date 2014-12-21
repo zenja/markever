@@ -33,3 +33,6 @@ server.pid
 *.eml
 /dist/
 .cache
+
+# secret oauth info
+oauth.properties

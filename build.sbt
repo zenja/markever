@@ -10,5 +10,6 @@ libraryDependencies ++= Seq(
   jdbc,
   anorm,
   cache,
-  ws
+  ws,
+  "com.evernote" % "evernote-api" % "1.25.1"
 )
