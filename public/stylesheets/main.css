@@ -37,29 +37,41 @@ blockquote {
 /* ---------------------------------------------------------------------------------------------------------------------
  * Main Layouts
  * ------------------------------------------------------------------------------------------------------------------- */
-#md_editor_div {
+html, body {
+    height: 100%;
+}
+
+#wrapper {
+    height: 100%;
+}
+
+#toolbar {
     position: absolute;
-    left: 0px;
+    left: 0;
+    top: 0;
+    width: 45px;
+    height: 100%;
+    background-color: #eaa;
+}
+
+#md_div {
+    margin-left: 45px;
+    height: 100%;
+}
+
+#md_editor_div {
+    float: left;
     width: 50%;
-    height: 90%;
+    height: 100%;
     overflow: scroll;
 }
 
 #md_html_div {
-    position: absolute;
-    right: 0px;
+    float: left;
     width: 50%;
-    height: 90%;
+    height: 100%;
     padding-left: 10px;
     overflow: scroll;
     border-left: 1px solid #eee;
 }
 
-#footer_div {
-    position: absolute;
-    bottom: 0px;
-    width: 100%;
-    height: 10%;
-    overflow: scroll;
-    background-color: #aaffff;
-}
