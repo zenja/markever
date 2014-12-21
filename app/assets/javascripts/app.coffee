@@ -117,8 +117,19 @@ $ ->
                          "</en-note>"
         console.log(final_note_xml)
 
+        # set title to content of first H1 tag
+        title = "New Note - Markever"
+        if $html_div_hidden.find("h1").size() > 0
+            title = $html_div_hidden.find("h1").text()
+        else if $html_div_hidden.find("h2").size() > 0
+            title = $html_div_hidden.find("h2").text()
+        else if $html_div_hidden.find("h3").size() > 0
+            title = $html_div_hidden.find("h3").text()
+        else if $html_div_hidden.find("p").size() > 0
+            title = $html_div_hidden.find("p").text()
+
         # invoke the api
-        $.post("/api/v1/notes", {title: "Test Note!", contentXmlStr: final_note_xml})
+        $.post("/api/v1/notes", {title: title, contentXmlStr: final_note_xml})
             .done (data) ->
                 alert("create note succeed: \n" + JSON.stringify(data))
             .fail (data) ->
