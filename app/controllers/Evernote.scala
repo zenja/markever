@@ -83,7 +83,6 @@ object Evernote extends Controller {
       val evernoteHelper = new EvernoteHelper(token = token.get)
       try {
         val note = evernoteHelper.createNote(title = noteFormData.title, contentXmlStr = noteFormData.contentXmlStr)
-        println("[DEBUG]: request to create note with content: " + noteFormData.contentXmlStr)
         val jsonResult = Json.obj("status" -> "SUCCESS", "note" -> Json.obj("guid" -> note.getGuid), "content" -> note.getContent)
         Created(jsonResult)
       } catch {
