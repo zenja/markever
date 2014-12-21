@@ -24,9 +24,15 @@ $ ->
     # ace editor creation and conf
     # ------------------------------------------------------------------------------------------------------------------
     editor = ace.edit("md_editor_div");
+    editor.renderer.setShowGutter(false);
     editor.setShowPrintMargin(false);
     editor.getSession().setMode("ace/mode/markdown");
     editor.getSession().setUseWrapMode(true);
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # auto focus on editor upon startup
+    # ------------------------------------------------------------------------------------------------------------------
+    editor.focus();
 
     # ------------------------------------------------------------------------------------------------------------------
     # auto-generate html when editing markdown
