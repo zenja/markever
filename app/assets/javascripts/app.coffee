@@ -43,13 +43,13 @@ $ ->
     # ------------------------------------------------------------------------------------------------------------------
     # "show html" link for debugging
     # ------------------------------------------------------------------------------------------------------------------
-    $("a#show_html").click ->
+    $("button#show_html").click ->
         alert(marked(editor.getValue()))
 
     # ------------------------------------------------------------------------------------------------------------------
     # "list" link for debugging: list all (not all actually...) Markever notes
     # ------------------------------------------------------------------------------------------------------------------
-    $("a#get_all_notes").click ->
+    $("button#get_all_notes").click ->
         $.get("/api/v1/notes")
             .done (data) ->
                 alert("list all notes succeeded: \n" + JSON.stringify(data))
@@ -59,7 +59,7 @@ $ ->
     # ------------------------------------------------------------------------------------------------------------------
     # "save note" link for debugging
     # ------------------------------------------------------------------------------------------------------------------
-    $("a#save_note").click ->
+    $("button#save_note").click ->
         # fill the hidden html div
         $html_div_hidden = $("#md_html_div_hidden")
         update_html(editor, $html_div_hidden)

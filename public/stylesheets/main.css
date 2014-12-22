@@ -49,13 +49,14 @@ html, body {
     position: absolute;
     left: 0;
     top: 0;
-    width: 45px;
+    width: 70px;
     height: 100%;
-    background-color: #eaa;
+    background-color: #fafafa;
+    border-right: 1px solid #eee;
 }
 
 #md_div {
-    margin-left: 45px;
+    margin-left: 70px;
     height: 100%;
 }
 
@@ -75,3 +76,24 @@ html, body {
     border-left: 1px solid #eee;
 }
 
+/* ---------------------------------------------------------------------------------------------------------------------
+ * Toolbar layouts
+ * ------------------------------------------------------------------------------------------------------------------- */
+.btn:focus {
+  outline: none;
+}
+
+.btn-circle {
+    background-color: #eee;
+    display: block;
+    width: 40px;
+    height: 40px;
+    margin: 10px auto;
+    padding: 10px 0;
+    font-size: 12px;
+    border-radius: 50%;
+}
+
+.btn-circle:hover {
+    background-color: #99ff33;
+}

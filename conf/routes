@@ -15,6 +15,7 @@ GET     /clear                      controllers.Application.clear
 GET     /javascripts/*file          controllers.Assets.at(path="/public/javascripts", file)
 GET     /images/*file               controllers.Assets.at(path="/public/images", file)
 GET     /stylesheets/*file          controllers.Assets.at(path="/public/stylesheets", file)
+GET     /fonts/*file                controllers.Assets.at(path="/public/fonts", file)
 
 # OAuth to Evernote
 GET     /authenticate               controllers.Evernote.authenticate
