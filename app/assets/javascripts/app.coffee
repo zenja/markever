@@ -47,6 +47,16 @@ $ ->
         alert(marked(editor.getValue()))
 
     # ------------------------------------------------------------------------------------------------------------------
+    # "list" link for debugging: list all (not all actually...) Markever notes
+    # ------------------------------------------------------------------------------------------------------------------
+    $("a#get_all_notes").click ->
+        $.get("/api/v1/notes")
+            .done (data) ->
+                alert("list all notes succeeded: \n" + JSON.stringify(data))
+            .fail (data) ->
+                alert("list all notes failed: \n" + JSON.stringify(data))
+
+    # ------------------------------------------------------------------------------------------------------------------
     # "save note" link for debugging
     # ------------------------------------------------------------------------------------------------------------------
     $("a#save_note").click ->
