@@ -72,6 +72,29 @@ class EvernoteHelper(val token: String) {
     return createdNote
   }
 
+  // TODO enrich interface to have notebook guid, tags, resources, etc.
+  def updateNote(noteGuid: String, title: Option[String], contentXmlStr: Option[String]) : Note = {
+    // check if guid exists
+    // TODO handle EDAMNotFoundException, etc.
+    val note = if (contentXmlStr.isDefined) {
+      noteStore.getNote(noteGuid, false, false, false, false)
+    } else {
+      noteStore.getNote(noteGuid, true, false, false, false)
+    }
+    // update content
+    if (contentXmlStr.isDefined) {
+      note.setContent(contentXmlStr.get)
+    } else {
+      note.unsetContent()
+    }
+    // update title
+    if (title.isDefined) {
+      note.setTitle(title.get)
+    }
+    noteStore.updateNote(note)
+    return note
+  }
+
   // test
   def tryListNotes: Unit = {
     println("all notes:")
@@ -84,10 +107,13 @@ class EvernoteHelper(val token: String) {
   }
 
   // test
-  def tryCreateNote: Unit = {
-    val newNote = createNote(title = "Success!", contentXmlStr = "This note is created by Scala code!")
-    println("Successfully created a new note with GUID: " + newNote.getGuid);
+  def tryCreateNote : Note = {
+    val contentXmlStr = EvernoteHelper.wrapInENML("<div><p>This note is created by Scala code!</p></div>")
+    println(contentXmlStr)
+    val newNote = createNote(title = "Success!", contentXmlStr = contentXmlStr)
+    println("Successfully created a new note with GUID: " + newNote.getGuid)
     println
+    return newNote
   }
 
   // test
@@ -108,5 +134,13 @@ class EvernoteHelper(val token: String) {
     val newNote = createNote(title = "Rich note!", contentXmlStr = content)
     println("Successfully created a new note with GUID: " + newNote.getGuid);
     println
+  }
+}
+
+object EvernoteHelper {
+  def wrapInENML(innerHTML: String) : String = {
+    "<?xml version='1.0' encoding='utf-8'?>" +
+      "<!DOCTYPE en-note SYSTEM 'http://xml.evernote.com/pub/enml2.dtd'>" +
+      s"<en-note>$innerHTML</en-note>"
   }
 }
