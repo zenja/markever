@@ -1,5 +1,7 @@
 package services
 
+import utils.MarkeverConf
+
 import scala.collection.JavaConverters._
 
 import com.evernote.auth.EvernoteAuth
@@ -60,18 +62,13 @@ class EvernoteHelper(val token: String) {
   }
 
   def createNote(title: String, contentXmlStr: String) : Note = {
-    // To create a new note, simply create a new Note object and fill in
-    // attributes such as the note's title.
     val note = new Note()
     note.setTitle(title)
-
     note.setContent(contentXmlStr)
-
-    // Finally, send the new note to Evernote using the createNote method
-    // The new Note object that is returned will contain server-generated
-    // attributes such as the new note's unique GUID.
     val createdNote: Note = noteStore.createNote(note);
-
+    noteStore.setNoteApplicationDataEntry(createdNote.getGuid(),
+      MarkeverConf.application_tag_name,
+      MarkeverConf.application_tag_value)
     return createdNote
   }
 
