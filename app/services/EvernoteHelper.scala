@@ -14,13 +14,7 @@ import com.evernote.edam.error.EDAMSystemException
 import com.evernote.edam.error.EDAMUserException
 import com.evernote.edam.notestore.NoteFilter
 import com.evernote.edam.notestore.NoteList
-import com.evernote.edam.`type`.Data
-import com.evernote.edam.`type`.Note
-import com.evernote.edam.`type`.NoteSortOrder
-import com.evernote.edam.`type`.Notebook
-import com.evernote.edam.`type`.Resource
-import com.evernote.edam.`type`.ResourceAttributes
-import com.evernote.edam.`type`.Tag
+import com.evernote.edam.`type`._
 import com.evernote.thrift.transport.TTransportException
 
 import scala.collection.mutable.ListBuffer
@@ -43,32 +37,42 @@ class EvernoteHelper(val token: String) {
   // Set up the NoteStore client
   val noteStore = factory.createNoteStoreClient()
 
-  def allNotes: List[Note] = {
-    val allNotes: ListBuffer[Note] = new ListBuffer[Note]
-    val notebooks : List[Notebook] = noteStore.listNotebooks().asScala.toList
-    for (notebook <- notebooks) {
-      val filter = new NoteFilter()
-      filter.setNotebookGuid(notebook.getGuid())
-      filter.setOrder(NoteSortOrder.CREATED.getValue())
-      filter.setAscending(true)
-
-      val noteList : NoteList = noteStore.findNotes(filter, 0, 100)
-      val notes : List[Note] = noteList.getNotes().asScala.toList
-      for (note <- notes) {
-        allNotes.append(note)
+  /** Get all notes created by Markever
+    *
+    * @return
+    */
+  def allNotes(retrieveContent: Boolean = false, retrieveResources: Boolean = false): List[Note] = {
+    val query = "sourceApplication:" + MarkeverConf.application_identifier
+    val noteFilter = new NoteFilter()
+    noteFilter.setWords(query)
+    noteFilter.setOrder(NoteSortOrder.UPDATED.getValue())
+    noteFilter.setAscending(false)
+    val noteList : NoteList = noteStore.findNotes(noteFilter, 0, 50)
+    // Note objects returned by findNotes() only contain note attributes
+    // such as title, GUID, creation date, update date, etc. The note content
+    // and binary resource data are omitted, although resource metadata is included.
+    // To get the note content and/or binary resources, call getNote() using the note's GUID.
+    return if (retrieveContent || retrieveResources) {
+      val notes = new ListBuffer[Note]
+      val iter = noteList.getNotesIterator
+      while (iter.hasNext) {
+        val note = iter.next()
+        notes.append(noteStore.getNote(note.getGuid, retrieveContent, retrieveResources, false, false))
       }
+      notes.toList
+    } else {
+      noteList.getNotes().asScala.toList
     }
-    return allNotes.toList
   }
 
   def createNote(title: String, contentXmlStr: String) : Note = {
     val note = new Note()
+    val noteAttribute = new NoteAttributes()
+    noteAttribute.setSourceApplication(MarkeverConf.application_identifier)
     note.setTitle(title)
     note.setContent(contentXmlStr)
+    note.setAttributes(noteAttribute)
     val createdNote: Note = noteStore.createNote(note);
-    noteStore.setNoteApplicationDataEntry(createdNote.getGuid(),
-      MarkeverConf.application_tag_name,
-      MarkeverConf.application_tag_value)
     return createdNote
   }
 
@@ -96,12 +100,11 @@ class EvernoteHelper(val token: String) {
   }
 
   // test
-  def tryListNotes: Unit = {
+  def tryListMarkeverNotes: Unit = {
     println("all notes:")
     println("-" * 80)
-    for (note <- allNotes) {
+    for (note <- allNotes()) {
       println(" * " + note.getTitle)
-      println(note.getContent())
     }
     println("-" * 80)
   }
@@ -109,9 +112,9 @@ class EvernoteHelper(val token: String) {
   // test
   def tryCreateNote : Note = {
     val contentXmlStr = EvernoteHelper.wrapInENML("<div><p>This note is created by Scala code!</p></div>")
-    println(contentXmlStr)
     val newNote = createNote(title = "Success!", contentXmlStr = contentXmlStr)
     println("Successfully created a new note with GUID: " + newNote.getGuid)
+    println("Note's source application: " + newNote.getAttributes.getSourceApplication)
     println
     return newNote
   }

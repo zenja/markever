@@ -7,12 +7,14 @@ object TryEvernoteService {
 
     // create a note
     val note = evernote.tryCreateNote
-    evernote.updateNote(note.getGuid(), Some("Yo!"), Some(EvernoteHelper.wrapInENML("<div><p>this note is updated!</p></div>")))
+
+    // update the note
+//    evernote.updateNote(note.getGuid(), Some("Yo!"), Some(EvernoteHelper.wrapInENML("<div><p>this note is updated!</p></div>")))
 
     // create a rich note
 //    evernote.tryCreateRichNote
 
     // print all notes' titles
-    evernote.tryListNotes
+    evernote.tryListMarkeverNotes
   }
 }

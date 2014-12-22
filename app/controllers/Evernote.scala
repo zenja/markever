@@ -4,6 +4,7 @@ import play.api._
 import play.api.data.Form
 import play.api.data.Forms._
 import play.api.libs.oauth._
+import play.api.mvc.Security.AuthenticatedBuilder
 import play.api.mvc._
 import play.api.libs.json._
 import play.api.Logger
@@ -60,6 +61,12 @@ object Evernote extends Controller {
         })
   }
 
+  /**
+   * Helper function
+   *
+   * @param request
+   * @return
+   */
   def sessionTokenPair(implicit request: RequestHeader): Option[RequestToken] = {
     for {
       token <- request.session.get("token")
@@ -77,15 +84,16 @@ object Evernote extends Controller {
   }
 
   def createNote = Action { implicit request =>
-    val token: Option[String] = request.session.get("token")
-    if (token.isDefined) {
+    if (tokenExists(request.session)) {
+      val token: String = request.session.get("token").get
       val noteFormData = noteForm.bindFromRequest.get
-      val evernoteHelper = new EvernoteHelper(token = token.get)
+      val evernoteHelper = new EvernoteHelper(token = token)
       try {
         val note = evernoteHelper.createNote(title = noteFormData.title, contentXmlStr = noteFormData.contentXmlStr)
         val jsonResult = Json.obj("status" -> "SUCCESS", "note" -> Json.obj("guid" -> note.getGuid), "content" -> note.getContent)
         Created(jsonResult)
       } catch {
+        // TODO handle other exceptions
         case ex: Throwable => {
           // return error message
           val jsonResult = Json.obj("status" -> "ERROR", "msg" -> ("Failed to create the note: " + ex.toString))
@@ -97,5 +105,41 @@ object Evernote extends Controller {
       val jsonResult = Json.obj("status" -> "AUTH_REQUIRED")
       Forbidden(jsonResult)
     }
+  }
+
+  def allNotes = Action { implicit request =>
+    if (tokenExists(request.session)) {
+      val token: String = request.session.get("token").get
+      val evernoteHelper = new EvernoteHelper(token = token)
+      try {
+        val notes = evernoteHelper.allNotes()
+        var notesJsonArr = Json.arr()
+        for (note <- notes) {
+          // FIXME avoid creating lots of new obj
+          notesJsonArr = notesJsonArr.append(Json.obj("title" -> note.getTitle, "guid" -> note.getGuid))
+        }
+        val jsonResult = Json.obj("status" -> "SUCCESS", "notes" -> notesJsonArr)
+        Ok(jsonResult)
+      } catch {
+        // TODO handle other exceptions
+        case ex: Throwable => {
+          // return error message
+          val jsonResult = Json.obj("status" -> "ERROR", "msg" -> ("Failed to create the note: " + ex.toString))
+          InternalServerError(jsonResult)
+        }
+      }
+    } else {
+      // token info missing, re-auth required
+      val jsonResult = Json.obj("status" -> "AUTH_REQUIRED")
+      Forbidden(jsonResult)
+    }
+  }
+
+  /**
+   * Helper function: check if Evernote auth info exists
+   */
+  def tokenExists(session: Session): Boolean = {
+    val token: Option[String] = session.get("token")
+    return token.isDefined
   }
 }

@@ -24,6 +24,5 @@ GET     /auth                       controllers.Evernote.authenticate
 GET     /play-evernote              controllers.Application.play_evernote
 
 # Service APIs
-#GET     /api/v1/notes
-#GET     /api/v1/notes/:guid
+GET     /api/v1/notes               controllers.Evernote.allNotes
 POST    /api/v1/notes               controllers.Evernote.createNote
