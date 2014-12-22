@@ -10,7 +10,7 @@
     <link rel="stylesheet" media="screen" href="@routes.Assets.at("/public/stylesheets", "bootstrap.min.css")">
     <link rel="stylesheet" media="screen" href="@routes.Assets.at("/public/stylesheets", "railscasts.css")">
     <link rel="stylesheet" media="screen" href="@routes.Assets.at("/public/stylesheets", "main.css")">
-    <link rel="shortcut icon" type="image/png" href="@routes.Assets.at("/public/images", "favicon.png")">
+    <link rel="shortcut icon" type="image/png" href="@routes.Assets.at("/public/images", "favicon.ico")">
 
     <script type="text/x-mathjax-config">
         MathJax.Hub.Config({tex2jax: {inlineMath: [['$','$'], ['\\(','\\)']]}});
@@ -28,6 +28,7 @@
 </head>
 <body>
     <div id="toolbar">
+        <img id="toolbar_logo" src="@routes.Assets.at("/public/images", "logo.png")" alt="logo" />
         <button class="btn btn-circle" id="show_html">
             <span class="glyphicon glyphicon-header" aria-hidden="true"></span>
         </button>
