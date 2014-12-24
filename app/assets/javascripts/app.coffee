@@ -1,3 +1,5 @@
+global = this
+
 $ ->
     ####################################################################################################################
     #                                                 DEFINE FUNCTIONS
@@ -23,7 +25,8 @@ $ ->
     # ------------------------------------------------------------------------------------------------------------------
     # ace editor creation and conf
     # ------------------------------------------------------------------------------------------------------------------
-    editor = ace.edit("md_editor_div");
+    global.editor = ace.edit("md_editor_div");
+    editor = global.editor
     editor.renderer.setShowGutter(false);
     editor.setShowPrintMargin(false);
     editor.getSession().setMode("ace/mode/markdown");
@@ -183,3 +186,6 @@ $ ->
         setTimeout (-> editor.session.on('changeScrollTop', editor_scroll_handler)), 20
     $html_div.scroll(html_scroll_handler)
 
+    # ------------------------------------------------------------------------------------------------------------------
+    # Show the content of newest Markever note
+    # ------------------------------------------------------------------------------------------------------------------
