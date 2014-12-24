@@ -119,6 +119,12 @@ $ ->
         # FIXME hack for strange class attr not removed
         cleaned_html = cleaned_html.replace(/class="[^"]*"/g, "")
 
+        # embbed raw markdown content into the html
+        cleaned_html = cleaned_html +
+            "<center style='display:none'>" +
+            $('<div />').text(editor.getValue()).html() +
+            "</center>"
+
         # add XML header & wrap with <en-note></en-note>
         final_note_xml = "<?xml version='1.0' encoding='utf-8'?>" +
                          "<!DOCTYPE en-note SYSTEM 'http://xml.evernote.com/pub/enml2.dtd'>" +
