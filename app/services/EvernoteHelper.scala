@@ -37,17 +37,17 @@ class EvernoteHelper(val token: String) {
   // Set up the NoteStore client
   val noteStore = factory.createNoteStoreClient()
 
-  /** Get all notes created by Markever
-    *
-    * @return
-    */
-  def allNotes(retrieveContent: Boolean = false, retrieveResources: Boolean = false): List[Note] = {
-    val query = "sourceApplication:" + MarkeverConf.application_identifier
+  def searchNotes(query: String,
+                  offset: Integer,
+                  maxNotes: Integer,
+                  retrieveContent: Boolean = false,
+                  retrieveResources: Boolean = false): List[Note] = {
     val noteFilter = new NoteFilter()
     noteFilter.setWords(query)
     noteFilter.setOrder(NoteSortOrder.UPDATED.getValue())
     noteFilter.setAscending(false)
-    val noteList : NoteList = noteStore.findNotes(noteFilter, 0, 50)
+    // TODO use findNotesMetadata() instead to get only needed metadata
+    val noteList : NoteList = noteStore.findNotes(noteFilter, offset, maxNotes)
     // Note objects returned by findNotes() only contain note attributes
     // such as title, GUID, creation date, update date, etc. The note content
     // and binary resource data are omitted, although resource metadata is included.
@@ -62,6 +62,34 @@ class EvernoteHelper(val token: String) {
       notes.toList
     } else {
       noteList.getNotes().asScala.toList
+    }
+  }
+
+  /** Get all notes created by Markever
+    *
+    * @param retrieveContent
+    * @param retrieveResources
+    * @return
+    */
+  def allNotes(retrieveContent: Boolean = false, retrieveResources: Boolean = false): List[Note] = {
+    val query = "sourceApplication:" + MarkeverConf.application_identifier
+    searchNotes(query, 0, 15)
+  }
+
+  /** Get the most recent updated Markever note
+   *
+   * @param retrieveContent
+   * @param retrieveResources
+   * @return
+   */
+  def newestNote(retrieveContent: Boolean = false, retrieveResources: Boolean = false): Option[Note] = {
+    val query = "sourceApplication:" + MarkeverConf.application_identifier
+    val notes: List[Note] = searchNotes(query, 0, 1,
+      retrieveContent = retrieveContent, retrieveResources = retrieveResources)
+    return if (notes.length == 1) {
+      Some(notes(0))
+    } else {
+      None
     }
   }
 
@@ -98,6 +126,10 @@ class EvernoteHelper(val token: String) {
     noteStore.updateNote(note)
     return note
   }
+
+  // -------------------------------------------------------------------------------------------------------------------
+  // -- Tests
+  // -------------------------------------------------------------------------------------------------------------------
 
   // test
   def tryListMarkeverNotes: Unit = {

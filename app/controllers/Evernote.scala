@@ -90,7 +90,7 @@ object Evernote extends Controller {
       val evernoteHelper = new EvernoteHelper(token = token)
       try {
         val note = evernoteHelper.createNote(title = noteFormData.title, contentXmlStr = noteFormData.contentXmlStr)
-        val jsonResult = Json.obj("status" -> "SUCCESS", "note" -> Json.obj("guid" -> note.getGuid), "content" -> note.getContent)
+        val jsonResult = Json.obj("status" -> "SUCCESS", "note" -> Json.obj("guid" -> note.getGuid))
         Created(jsonResult)
       } catch {
         // TODO handle other exceptions
@@ -125,6 +125,39 @@ object Evernote extends Controller {
         case ex: Throwable => {
           // return error message
           val jsonResult = Json.obj("status" -> "ERROR", "msg" -> ("Failed to create the note: " + ex.toString))
+          InternalServerError(jsonResult)
+        }
+      }
+    } else {
+      // token info missing, re-auth required
+      val jsonResult = Json.obj("status" -> "AUTH_REQUIRED")
+      Forbidden(jsonResult)
+    }
+  }
+
+  def newestNote = Action { implicit request =>
+    if (tokenExists(request.session)) {
+      val token: String = request.session.get("token").get
+      val evernoteHelper = new EvernoteHelper(token = token)
+      try {
+        val note = evernoteHelper.newestNote(retrieveContent = true)
+        if (note.isDefined) {
+          val jsonResult = Json.obj("status" -> "SUCCESS",
+            "note" -> Json.obj("title" -> note.get.getTitle,
+                               "guid" -> note.get.getGuid,
+                               "content" -> note.get.getContent)
+          )
+          Ok(jsonResult)
+        } else {
+          val jsonResult = Json.obj("status" -> "NO_NOTE",
+            "note" -> Json.obj("title" -> "", "guid" -> "", "content" -> ""))
+          Ok(jsonResult)
+        }
+      } catch {
+        // TODO handle other exceptions
+        case ex: Throwable => {
+          // return error message
+          val jsonResult = Json.obj("status" -> "ERROR", "msg" -> ("Failed to fetch the newest note: " + ex.toString))
           InternalServerError(jsonResult)
         }
       }

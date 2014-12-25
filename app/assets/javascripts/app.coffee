@@ -12,6 +12,9 @@ $ ->
         # render Latax
         MathJax.Hub.Queue(["Typeset", MathJax.Hub, $html_div_0.get(0)])
 
+    extract_markdown_from_enml = (enml) ->
+        "# Fake"
+
 
     ####################################################################################################################
     #                                                      MAIN
@@ -189,3 +192,18 @@ $ ->
     # ------------------------------------------------------------------------------------------------------------------
     # Show the content of newest Markever note
     # ------------------------------------------------------------------------------------------------------------------
+    $.get("/api/v1/notes/newest")
+        .done (data) ->
+            if data.status == "SUCCESS"
+                # show the fetched note
+                editor.setValue(extract_markdown_from_enml(data.note.content))
+                # TODO save note guid
+                alert("fetch newest note succeeded!")
+            else if data.status == "NO_NOTE"
+                # show blank or: TODO example note
+                # TODO clear guid
+                alert("no note fetched!")
+            else
+                alert("SHOULD NOT HAPPEN!")
+        .fail (data) ->
+            alert("failed to fetch the newest note: \n" + JSON.stringify(data))
