@@ -1,8 +1,8 @@
 angular.module('markever', ['ui.ace'])
 
 angular.module('markever')
-.controller "EditorController", ['$scope','$window', '$http', '$sce',
-($scope, $window, $http, $sce) ->
+.controller "EditorController", ['$scope','$window', '$http', '$sce', 'enmlRenderer', 'scrollSyncor'
+($scope, $window, $http, $sce, enmlRenderer, scrollSyncor) ->
     # ------------------------------------------------------------------------------------------------------------------
     # define frequently-used jquery elements
     # ------------------------------------------------------------------------------------------------------------------
@@ -25,34 +25,7 @@ angular.module('markever')
     # refer: http://stackoverflow.com/questions/18952623/synchronized-scrolling-using-jquery
     # ------------------------------------------------------------------------------------------------------------------
     $scope.aceLoaded = (editor) =>
-        editor.setShowPrintMargin(false)
-        # sync scroll: md -> html
-        editor_scroll_handler = (scroll) =>
-            percentage = scroll / (editor.session.getScreenLength() * \
-                editor.renderer.lineHeight - ($(editor.renderer.getContainerElement()).height()))
-            if percentage > 1 or percentage < 0 then return
-            percentage = Math.floor(percentage * 1000) / 1000;
-            # detach other's scroll handler first
-            $html_div.off('scroll', html_scroll_handler)
-            md_html_div = $html_div.get(0)
-            md_html_div.scrollTop = percentage * (md_html_div.scrollHeight - md_html_div.offsetHeight)
-            # re-attach other's scroll handler at the end, with some delay
-            setTimeout (-> $html_div.scroll(html_scroll_handler)), 10
-        editor.session.on('changeScrollTop', editor_scroll_handler)
-
-        # sync scroll: html -> md
-        html_scroll_handler = (e) =>
-            md_html_div = $html_div.get(0)
-            percentage = md_html_div.scrollTop / (md_html_div.scrollHeight - md_html_div.offsetHeight)
-            if percentage > 1 or percentage < 0 then return
-            percentage = Math.floor(percentage * 1000) / 1000;
-            # detach other's scroll handler first
-            editor.getSession().removeListener('changeScrollTop', editor_scroll_handler);
-            editor.session.setScrollTop((editor.session.getScreenLength() * \
-                editor.renderer.lineHeight - $(editor.renderer.getContainerElement()).height()) * percentage)
-            # re-attach other's scroll handler at the end, with some delay
-            setTimeout (-> editor.session.on('changeScrollTop', editor_scroll_handler)), 20
-        $html_div.scroll(html_scroll_handler)
+        scrollSyncor.syncScroll(editor, $html_div)
 
     $scope.aceChanged = (e) ->
         $html_div = $("#md_html_div")
@@ -65,15 +38,39 @@ angular.module('markever')
     # ------------------------------------------------------------------------------------------------------------------
     vm.save_note = ->
         # fill the hidden html div
-        $html_div_hidden = $("#md_html_div_hidden")
+        html_div_hidden = $("#md_html_div_hidden")
+        final_note_xml = enmlRenderer.getEnmlFromElement(html_div_hidden, vm.markdown)
+        # set title to content of first H1 tag
+        title = "New Note - Markever"
+        if html_div_hidden.find("h1").size() > 0
+            title = html_div_hidden.find("h1").text()
+        else if html_div_hidden.find("h2").size() > 0
+            title = html_div_hidden.find("h2").text()
+        else if html_div_hidden.find("h3").size() > 0
+            title = html_div_hidden.find("h3").text()
+        else if html_div_hidden.find("p").size() > 0
+            title = html_div_hidden.find("p").text()
+        # invoke the api
+        $.post("/api/v1/notes", {title: title, contentXmlStr: final_note_xml})
+            .done (data) ->
+                alert("create note succeed: \n" + JSON.stringify(data))
+            .fail (data) ->
+                alert("create note failed: \n" + JSON.stringify(data))
+]
 
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Service: enmlRenderer
+# ----------------------------------------------------------------------------------------------------------------------
+angular.module('markever').factory 'enmlRenderer', ->
+    getEnmlFromElement = (jq_element, markdown) ->
         # highlight code & style Latex
-        $html_div_hidden.find('pre code').each (i, block) ->
+        jq_element.find('pre code').each (i, block) ->
             hljs.highlightBlock(block)
-        MathJax.Hub.Queue(["Typeset", MathJax.Hub, $html_div_hidden.get(0)])
+        MathJax.Hub.Queue(["Typeset", MathJax.Hub, jq_element.get(0)])
 
         # remove all script tags
-        $html_div_hidden.find("script").remove()
+        jq_element.find("script").remove()
 
         # add inline style
         # refer: https://github.com/Karl33to/jquery.inlineStyler
@@ -104,10 +101,10 @@ angular.module('markever')
                 'border-matters' : ['HR', 'BLOCKQUOTE', 'SPAN', 'PRE', 'CODE'],
             }
         }
-        $html_div_hidden.inlineStyler(inline_styler_option)
+        jq_element.inlineStyler(inline_styler_option)
 
         # set href to start with "http" is no protocol assigned
-        $html_div_hidden.find("a").attr "href", (i, href) ->
+        jq_element.find("a").attr "href", (i, href) ->
             if not href.toLowerCase().match("(^http)|(^https)|(^file)")
                 return "http://" + href
             else
@@ -125,14 +122,14 @@ angular.module('markever')
             allowedAttributes: [["href", ["a"]], ["style"]],
             removeAttrs: ["id", "class", "onclick", "ondblclick", "accesskey", "data", "dynsrc", "tabindex",],
         }
-        cleaned_html = $.htmlClean($html_div_hidden.html(), html_clean_option);
+        cleaned_html = $.htmlClean(jq_element.html(), html_clean_option);
         # FIXME hack for strange class attr not removed
         cleaned_html = cleaned_html.replace(/class="[^"]*"/g, "")
 
         # embbed raw markdown content into the html
         cleaned_html = cleaned_html +
             "<center style='display:none'>" +
-            $('<div />').text(vm.markdown).html() +
+            $('<div />').text(markdown).html() +
             "</center>"
 
         # add XML header & wrap with <en-note></en-note>
@@ -143,22 +140,48 @@ angular.module('markever')
                          "</en-note>"
         # FIXME debugging info
         console.log(final_note_xml)
+        return final_note_xml
 
-        # set title to content of first H1 tag
-        title = "New Note - Markever"
-        if $html_div_hidden.find("h1").size() > 0
-            title = $html_div_hidden.find("h1").text()
-        else if $html_div_hidden.find("h2").size() > 0
-            title = $html_div_hidden.find("h2").text()
-        else if $html_div_hidden.find("h3").size() > 0
-            title = $html_div_hidden.find("h3").text()
-        else if $html_div_hidden.find("p").size() > 0
-            title = $html_div_hidden.find("p").text()
+    return {
+        getEnmlFromElement : getEnmlFromElement
+    }
 
-        # invoke the api
-        $.post("/api/v1/notes", {title: title, contentXmlStr: final_note_xml})
-            .done (data) ->
-                alert("create note succeed: \n" + JSON.stringify(data))
-            .fail (data) ->
-                alert("create note failed: \n" + JSON.stringify(data))
-]
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Service: enmlRenderer
+# ----------------------------------------------------------------------------------------------------------------------
+angular.module('markever').factory 'scrollSyncor', ->
+    syncScroll = (ace_editor, jq_div) ->
+        ace_editor.setShowPrintMargin(false)
+        # sync scroll: md -> html
+        editor_scroll_handler = (scroll) =>
+            percentage = scroll / (ace_editor.session.getScreenLength() * \
+                ace_editor.renderer.lineHeight - ($(ace_editor.renderer.getContainerElement()).height()))
+            if percentage > 1 or percentage < 0 then return
+            percentage = Math.floor(percentage * 1000) / 1000;
+            # detach other's scroll handler first
+            jq_div.off('scroll', html_scroll_handler)
+            md_html_div = jq_div.get(0)
+            md_html_div.scrollTop = percentage * (md_html_div.scrollHeight - md_html_div.offsetHeight)
+            # re-attach other's scroll handler at the end, with some delay
+            setTimeout (-> jq_div.scroll(html_scroll_handler)), 10
+        ace_editor.session.on('changeScrollTop', editor_scroll_handler)
+
+        # sync scroll: html -> md
+        html_scroll_handler = (e) =>
+            md_html_div = jq_div.get(0)
+            percentage = md_html_div.scrollTop / (md_html_div.scrollHeight - md_html_div.offsetHeight)
+            if percentage > 1 or percentage < 0 then return
+            percentage = Math.floor(percentage * 1000) / 1000;
+            # detach other's scroll handler first
+            ace_editor.getSession().removeListener('changeScrollTop', editor_scroll_handler);
+            ace_editor.session.setScrollTop((ace_editor.session.getScreenLength() * \
+                ace_editor.renderer.lineHeight - $(ace_editor.renderer.getContainerElement()).height()) * percentage)
+            # re-attach other's scroll handler at the end, with some delay
+            setTimeout (-> ace_editor.session.on('changeScrollTop', editor_scroll_handler)), 20
+        jq_div.scroll(html_scroll_handler)
+
+    return {
+        syncScroll : syncScroll
+    }
+
