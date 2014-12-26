@@ -66,6 +66,11 @@ angular.module('markever').controller "EditorController", ['$scope','$window', '
             # fill the hidden html div
             $html_div_hidden = $("#md_html_div_hidden")
 
+            # highlight code & style Latex
+            $html_div_hidden.find('pre code').each (i, block) ->
+                hljs.highlightBlock(block)
+            MathJax.Hub.Queue(["Typeset", MathJax.Hub, $html_div_hidden.get(0)])
+
             # remove all script tags
             $html_div_hidden.find("script").remove()
 
@@ -76,8 +81,9 @@ angular.module('markever').controller "EditorController", ['$scope','$window', '
                 'propertyGroups' : {
                     'font-matters' : ['font-size', 'font-family', 'font-style', 'font-weight'],
                     'text-matters' : ['text-indent', 'text-align', 'text-transform', 'letter-spacing', 'word-spacing',
-                                      'word-wrap', 'white-space', 'line-height', 'direction']
-                    'size-matters' : ['display', 'width', 'height'],
+                                      'word-wrap', 'white-space', 'line-height', 'direction'],
+                    'display-matters' : ['display'],
+                    'size-matters' : ['width', 'height'],
                     'color-matters' : ['color', 'background-color'],
                     'position-matters' : ['margin', 'margin-left', 'margin-right', 'margin-top', 'margin-bottom',
                                           'padding', 'padding-left', 'padding-right', 'padding-top', 'padding-bottom',
@@ -89,7 +95,8 @@ angular.module('markever').controller "EditorController", ['$scope','$window', '
                     # N.B. UPPERCASE tags
                     'font-matters' : ['DIV', 'BLOCKQUOTE', 'SPAN', 'STRONG', 'EM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'],
                     'text-matters' : ['SPAN', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'],
-                    'size-matters' : ['HR', 'PRE', 'SPAN', 'UL', 'OL', 'LI', 'PRE', 'CODE'],
+                    'display-matters' : ['HR', 'PRE', 'SPAN', 'UL', 'OL', 'LI', 'PRE', 'CODE'],
+                    'size-matters' : ['HR', 'SPAN', 'UL', 'OL', 'LI'],
                     'color-matters' : ['DIV', 'SPAN', 'PRE', 'CODE', 'BLOCKQUOTE'],
                     'position-matters' : ['DIV', 'PRE', 'BLOCKQUOTE', 'SPAN', 'HR', 'UL', 'OL', 'LI', 'P',
                                           'H1', 'H2', 'H3', 'H4', 'H5', 'H6'],
