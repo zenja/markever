@@ -1,24 +1,50 @@
-angular.module('markever', ['ui.ace'])
+markever = angular.module('markever', ['ngResource', 'ui.ace', 'ui.bootstrap'])
 
-angular.module('markever')
-.controller 'EditorController', ['$scope','$window', '$http', '$sce', 'enmlRenderer', 'scrollSyncor'
-($scope, $window, $http, $sce, enmlRenderer, scrollSyncor) ->
+markever.controller 'EditorController',
+['$scope','$window', '$http', '$sce', 'enmlRenderer', 'scrollSyncor', 'apiClient',
+($scope, $window, $http, $sce, enmlRenderer, scrollSyncor, apiClient) ->
     # ------------------------------------------------------------------------------------------------------------------
     # define frequently-used jquery elements
     # ------------------------------------------------------------------------------------------------------------------
     $html_div = $('#md_html_div')
 
     # ------------------------------------------------------------------------------------------------------------------
-    # ng related
+    # ng controller members
     # ------------------------------------------------------------------------------------------------------------------
     vm = this
-    vm.aceLoaded = (_editor) ->
-        # reserve, do nothing at the moment
-    vm.aceChanged = (e) ->
-        # reserve, do nothing at the moment
+
     vm.md2Html = ->
         vm.html = $window.marked(vm.markdown)
         vm.htmlSafe = $sce.trustAsHtml(vm.html)
+
+    vm.ace_editor = ''
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # toolbar
+    # ------------------------------------------------------------------------------------------------------------------
+    $scope.items = [
+        'The first choice!',
+        'And another choice for you.',
+        'but wait! A third!'
+    ]
+
+    vm.toolbar_status = {
+        is_notelist_open: false
+    }
+
+    $scope.toggleDropdown = ($event) ->
+        $event.preventDefault()
+        $event.stopPropagation()
+        $scope.status.isopen = not $scope.status.isopen
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # note list
+    # ------------------------------------------------------------------------------------------------------------------
+    vm.all_notes = {}
+    # TODO prevent multipal duplicated requests
+    vm.refresh_all_notes = ->
+        apiClient.notes.all (notes) ->
+            vm.all_notes = notes
 
     # ------------------------------------------------------------------------------------------------------------------
     # sync scroll between two columns
@@ -26,6 +52,8 @@ angular.module('markever')
     # ------------------------------------------------------------------------------------------------------------------
     $scope.aceLoaded = (editor) =>
         scrollSyncor.syncScroll(editor, $html_div)
+        vm.ace_editor = editor
+        vm.refresh_all_notes()
 
     $scope.aceChanged = (e) ->
         $html_div = $('#md_html_div')
@@ -151,7 +179,7 @@ angular.module('markever').factory 'enmlRenderer', ->
 # ----------------------------------------------------------------------------------------------------------------------
 # Service: enmlRenderer
 # ----------------------------------------------------------------------------------------------------------------------
-angular.module('markever').factory 'scrollSyncor', ->
+markever.factory 'scrollSyncor', ->
     syncScroll = (ace_editor, jq_div) ->
         ace_editor.setShowPrintMargin(false)
         # sync scroll: md -> html
@@ -185,4 +213,18 @@ angular.module('markever').factory 'scrollSyncor', ->
     return {
         syncScroll : syncScroll
     }
+
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Service: apiClient
+# ----------------------------------------------------------------------------------------------------------------------
+markever.factory 'apiClient', ['$resource', ($resource) ->
+    Notes = $resource('/api/v1/notes', {}, {
+        all: {method : 'GET', params : {}}
+    })
+
+    return {
+        notes : Notes
+    }
+]
 
