@@ -1,12 +1,12 @@
 angular.module('markever', ['ui.ace'])
 
 angular.module('markever')
-.controller "EditorController", ['$scope','$window', '$http', '$sce', 'enmlRenderer', 'scrollSyncor'
+.controller 'EditorController', ['$scope','$window', '$http', '$sce', 'enmlRenderer', 'scrollSyncor'
 ($scope, $window, $http, $sce, enmlRenderer, scrollSyncor) ->
     # ------------------------------------------------------------------------------------------------------------------
     # define frequently-used jquery elements
     # ------------------------------------------------------------------------------------------------------------------
-    $html_div = $("#md_html_div")
+    $html_div = $('#md_html_div')
 
     # ------------------------------------------------------------------------------------------------------------------
     # ng related
@@ -28,34 +28,34 @@ angular.module('markever')
         scrollSyncor.syncScroll(editor, $html_div)
 
     $scope.aceChanged = (e) ->
-        $html_div = $("#md_html_div")
+        $html_div = $('#md_html_div')
         $html_div.find('pre code').each (i, block) ->
             hljs.highlightBlock(block)
-        MathJax.Hub.Queue(["Typeset", MathJax.Hub, $html_div.get(0)])
+        MathJax.Hub.Queue(['Typeset', MathJax.Hub, $html_div.get(0)])
 
     # ------------------------------------------------------------------------------------------------------------------
     # save note
     # ------------------------------------------------------------------------------------------------------------------
     vm.save_note = ->
         # fill the hidden html div
-        html_div_hidden = $("#md_html_div_hidden")
+        html_div_hidden = $('#md_html_div_hidden')
         final_note_xml = enmlRenderer.getEnmlFromElement(html_div_hidden, vm.markdown)
         # set title to content of first H1 tag
-        title = "New Note - Markever"
-        if html_div_hidden.find("h1").size() > 0
-            title = html_div_hidden.find("h1").text()
-        else if html_div_hidden.find("h2").size() > 0
-            title = html_div_hidden.find("h2").text()
-        else if html_div_hidden.find("h3").size() > 0
-            title = html_div_hidden.find("h3").text()
-        else if html_div_hidden.find("p").size() > 0
-            title = html_div_hidden.find("p").text()
+        title = 'New Note - Markever'
+        if html_div_hidden.find('h1').size() > 0
+            title = html_div_hidden.find('h1').text()
+        else if html_div_hidden.find('h2').size() > 0
+            title = html_div_hidden.find('h2').text()
+        else if html_div_hidden.find('h3').size() > 0
+            title = html_div_hidden.find('h3').text()
+        else if html_div_hidden.find('p').size() > 0
+            title = html_div_hidden.find('p').text()
         # invoke the api
-        $.post("/api/v1/notes", {title: title, contentXmlStr: final_note_xml})
+        $.post('/api/v1/notes', {title: title, contentXmlStr: final_note_xml})
             .done (data) ->
-                alert("create note succeed: \n" + JSON.stringify(data))
+                alert('create note succeed: \n' + JSON.stringify(data))
             .fail (data) ->
-                alert("create note failed: \n" + JSON.stringify(data))
+                alert('create note failed: \n' + JSON.stringify(data))
 ]
 
 
@@ -67,10 +67,10 @@ angular.module('markever').factory 'enmlRenderer', ->
         # highlight code & style Latex
         jq_element.find('pre code').each (i, block) ->
             hljs.highlightBlock(block)
-        MathJax.Hub.Queue(["Typeset", MathJax.Hub, jq_element.get(0)])
+        MathJax.Hub.Queue(['Typeset', MathJax.Hub, jq_element.get(0)])
 
         # remove all script tags
-        jq_element.find("script").remove()
+        jq_element.find('script').remove()
 
         # add inline style
         # refer: https://github.com/Karl33to/jquery.inlineStyler
@@ -103,41 +103,42 @@ angular.module('markever').factory 'enmlRenderer', ->
         }
         jq_element.inlineStyler(inline_styler_option)
 
-        # set href to start with "http" is no protocol assigned
-        jq_element.find("a").attr "href", (i, href) ->
-            if not href.toLowerCase().match("(^http)|(^https)|(^file)")
-                return "http://" + href
+        # set href to start with 'http' is no protocol assigned
+        jq_element.find('a').attr 'href', (i, href) ->
+            if not href.toLowerCase().match('(^http)|(^https)|(^file)')
+                return 'http://' + href
             else
                 return href
 
         # clean the html tags/attributes
         html_clean_option = {
             format: true,
-            allowedTags: ["a", "abbr", "acronym", "address", "area", "b", "bdo", "big", "blockquote",
-                          "br", "caption", "center", "cite", "code", "col", "colgroup", "dd", "del",
-                          "dfn", "div", "dl", "dt", "em", "font", "h1", "h2", "h3", "h4", "h5", "h6",
-                          "hr", "i", "img", "ins", "kbd", "li", "map", "ol", "p", "pre", "q", "s",
-                          "samp", "small", "span", "strike", "strong", "sub", "sup", "table", "tbody",
-                          "td", "tfoot", "th", "thead", "title", "tr", "tt", "u", "ul", "var", "xmp",],
-            allowedAttributes: [["href", ["a"]], ["style"]],
-            removeAttrs: ["id", "class", "onclick", "ondblclick", "accesskey", "data", "dynsrc", "tabindex",],
+            allowedTags: ['a', 'abbr', 'acronym', 'address', 'area', 'b', 'bdo', 'big', 'blockquote',
+                          'br', 'caption', 'center', 'cite', 'code', 'col', 'colgroup', 'dd', 'del',
+                          'dfn', 'div', 'dl', 'dt', 'em', 'font', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                          'hr', 'i', 'img', 'ins', 'kbd', 'li', 'map', 'ol', 'p', 'pre', 'q', 's',
+                          'samp', 'small', 'span', 'strike', 'strong', 'sub', 'sup', 'table', 'tbody',
+                          'td', 'tfoot', 'th', 'thead', 'title', 'tr', 'tt', 'u', 'ul', 'var', 'xmp',],
+            allowedAttributes: [['href', ['a']], ['style']],
+            removeAttrs: ['id', 'class', 'onclick', 'ondblclick', 'accesskey', 'data', 'dynsrc', 'tabindex',],
         }
         cleaned_html = $.htmlClean(jq_element.html(), html_clean_option);
         # FIXME hack for strange class attr not removed
-        cleaned_html = cleaned_html.replace(/class="[^"]*"/g, "")
+        cleaned_html = cleaned_html.replace(/class='[^']*'/g, '')
+        cleaned_html = cleaned_html.replace(/class="[^"]*"/g, '')
 
         # embbed raw markdown content into the html
         cleaned_html = cleaned_html +
-            "<center style='display:none'>" +
+            '<center style="display:none">' +
             $('<div />').text(markdown).html() +
-            "</center>"
+            '</center>'
 
         # add XML header & wrap with <en-note></en-note>
-        final_note_xml = "<?xml version='1.0' encoding='utf-8'?>" +
-                         "<!DOCTYPE en-note SYSTEM 'http://xml.evernote.com/pub/enml2.dtd'>" +
-                         "<en-note>" +
+        final_note_xml = '<?xml version="1.0" encoding="utf-8"?>' +
+                         '<!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">' +
+                         '<en-note>' +
                          cleaned_html +
-                         "</en-note>"
+                         '</en-note>'
         # FIXME debugging info
         console.log(final_note_xml)
         return final_note_xml
