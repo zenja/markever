@@ -78,18 +78,24 @@ object Evernote extends Controller {
 
   val noteForm: Form[NoteModel] = Form {
     mapping(
+      // guid is option: when creating new note guid is not needed
+      "guid" -> text,
       "title" -> nonEmptyText,
-      "contentXmlStr" -> text
+      "enml" -> nonEmptyText
     )(NoteModel.apply)(NoteModel.unapply)
   }
 
-  def createNote = Action { implicit request =>
+  def updateNote = Action { implicit request =>
     if (tokenExists(request.session)) {
       val token: String = request.session.get("token").get
       val noteFormData = noteForm.bindFromRequest.get
       val evernoteHelper = new EvernoteHelper(token = token)
       try {
-        val note = evernoteHelper.createNote(title = noteFormData.title, contentXmlStr = noteFormData.contentXmlStr)
+        val note = evernoteHelper.updateNote(
+          title = noteFormData.title,
+          enml = noteFormData.enml,
+          guid = noteFormData.guid
+        )
         val jsonResult = Json.obj("status" -> "SUCCESS", "note" -> Json.obj("guid" -> note.getGuid))
         Created(jsonResult)
       } catch {

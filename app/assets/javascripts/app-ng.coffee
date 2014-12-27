@@ -54,8 +54,9 @@ markever.controller 'EditorController',
     # ------------------------------------------------------------------------------------------------------------------
     # TODO prevent multipal duplicated requests
     vm.refresh_all_notes = ->
-        apiClient.notes.all (notes) ->
-            vm.all_notes = notes
+        apiClient.notes.all (data) ->
+            # TODO handle failure
+            vm.all_notes = data['notes']
 
     vm.load_note = (guid) ->
         # check if the note to be loaded is already current note
@@ -109,23 +110,32 @@ markever.controller 'EditorController',
     vm.save_note = ->
         # fill the hidden html div
         html_div_hidden = $('#md_html_div_hidden')
-        final_note_xml = enmlRenderer.getEnmlFromElement(html_div_hidden, vm.note.markdown)
-        # set title to content of first H1 tag
-        title = 'New Note - Markever'
+        enml = enmlRenderer.getEnmlFromElement(html_div_hidden, vm.note.markdown)
+        # set title to content of first H1, H2, H3, H4 tag
+        vm.note.title = 'New Note - Markever'
         if html_div_hidden.find('h1').size() > 0
-            title = html_div_hidden.find('h1').text()
+            vm.note.title = html_div_hidden.find('h1').text()
         else if html_div_hidden.find('h2').size() > 0
-            title = html_div_hidden.find('h2').text()
+            vm.note.title = html_div_hidden.find('h2').text()
         else if html_div_hidden.find('h3').size() > 0
-            title = html_div_hidden.find('h3').text()
+            vm.note.title = html_div_hidden.find('h3').text()
         else if html_div_hidden.find('p').size() > 0
-            title = html_div_hidden.find('p').text()
+            vm.note.title = html_div_hidden.find('p').text()
         # invoke the api
-        $.post('/api/v1/notes', {title: title, contentXmlStr: final_note_xml})
-            .done (data) ->
-                alert('create note succeed: \n' + JSON.stringify(data))
-            .fail (data) ->
-                alert('create note failed: \n' + JSON.stringify(data))
+        # TODO handle error
+        apiClient.notes.save {
+                guid: vm.note.guid,
+                title: vm.note.title,
+                enml: enml,
+            }, (data) ->
+                # update guid
+                vm.note.guid = data.note.guid
+                alert('create/update note succeed: \n' + JSON.stringify(data))
+#        $.post('/api/v1/notes', {title: vm.note.title, contentXmlStr: final_note_xml})
+#            .done (data) ->
+#                alert('create note succeed: \n' + JSON.stringify(data))
+#            .fail (data) ->
+#                alert('create note failed: \n' + JSON.stringify(data))
 ]
 
 
@@ -262,9 +272,10 @@ markever.factory 'scrollSyncor', ->
 # ----------------------------------------------------------------------------------------------------------------------
 markever.factory 'apiClient', ['$resource', ($resource) ->
     Notes = $resource('/api/v1/notes/:id', {id: '@id'}, {
-        all: {method : 'GET', params : {}},
+        all: {method : 'GET', params : {id: ''}},
         note: {method : 'GET', params: {}},
         newest: {method : 'GET', params : {id: 'newest'}},
+        save: {method : 'POST', params: {id: ''}},
     })
 
     return {

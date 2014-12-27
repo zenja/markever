@@ -15,6 +15,6 @@ object TryEvernoteService {
 //    evernote.tryCreateRichNote
 
     // print all notes' titles
-    evernote.tryListMarkeverNotes
+//    evernote.tryListMarkeverNotes
   }
 }
