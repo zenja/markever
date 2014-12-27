@@ -29,4 +29,5 @@ GET     /play-evernote              controllers.Application.play_evernote
 # Service APIs
 GET     /api/v1/notes               controllers.Evernote.allNotes
 GET     /api/v1/notes/newest        controllers.Evernote.newestNote
+GET     /api/v1/notes/:guid         controllers.Evernote.getNote(guid: String)
 POST    /api/v1/notes               controllers.Evernote.createNote

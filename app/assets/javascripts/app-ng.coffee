@@ -1,56 +1,44 @@
 markever = angular.module('markever', ['ngResource', 'ui.ace', 'ui.bootstrap'])
 
 markever.controller 'EditorController',
-['$scope','$window', '$http', '$sce', 'enmlRenderer', 'scrollSyncor', 'apiClient',
-($scope, $window, $http, $sce, enmlRenderer, scrollSyncor, apiClient) ->
-    # ------------------------------------------------------------------------------------------------------------------
-    # define frequently-used jquery elements
-    # ------------------------------------------------------------------------------------------------------------------
-    $html_div = $('#md_html_div')
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # ng controller members
-    # ------------------------------------------------------------------------------------------------------------------
+['$scope','$window', '$http', '$sce', '$modal', 'enmlRenderer', 'scrollSyncor', 'apiClient',
+($scope, $window, $http, $sce, $modal, enmlRenderer, scrollSyncor, apiClient) ->
     vm = this
 
-    vm.md2Html = ->
-        vm.html = $window.marked(vm.markdown)
-        vm.htmlSafe = $sce.trustAsHtml(vm.html)
+    # ------------------------------------------------------------------------------------------------------------------
+    # Models for notes
+    # ------------------------------------------------------------------------------------------------------------------
+    # current note
+    vm.note = {
+        guid: "",
+        title: "",
+        markdown: "",
+    }
+    # note lists containing only title and guid
+    vm.all_notes = {}
 
+    # ------------------------------------------------------------------------------------------------------------------
+    # ace editor
+    # ------------------------------------------------------------------------------------------------------------------
     vm.ace_editor = ''
 
     # ------------------------------------------------------------------------------------------------------------------
-    # toolbar
+    # markdown help functions
     # ------------------------------------------------------------------------------------------------------------------
-    $scope.items = [
-        'The first choice!',
-        'And another choice for you.',
-        'but wait! A third!'
-    ]
+    vm.md2html = ->
+        vm.html = $window.marked(vm.note.markdown)
+        vm.htmlSafe = $sce.trustAsHtml(vm.html)
 
-    vm.toolbar_status = {
-        is_notelist_open: false
-    }
+    vm.get_md_from_enml = (enml) ->
+        enml.replace(/<\?xml version="1\.0" encoding="utf-8"\?>/i, '')
+        enml.replace(/<!DOCTYPE en-note SYSTEM "http:\/\/xml\.evernote\.com\/pub\/enml2\.dtd">/i, '')
+        enml.replace(/<en-note>/i, '')
+        enml.replace(/<\/en-note>/i, '')
+        # TODO handle no md found
+        return $(enml).find('center').text()
 
-    $scope.toggleDropdown = ($event) ->
-        $event.preventDefault()
-        $event.stopPropagation()
-        $scope.status.isopen = not $scope.status.isopen
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # note list
-    # ------------------------------------------------------------------------------------------------------------------
-    vm.all_notes = {}
-    # TODO prevent multipal duplicated requests
-    vm.refresh_all_notes = ->
-        apiClient.notes.all (notes) ->
-            vm.all_notes = notes
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # sync scroll between two columns
-    # refer: http://stackoverflow.com/questions/18952623/synchronized-scrolling-using-jquery
-    # ------------------------------------------------------------------------------------------------------------------
     $scope.aceLoaded = (editor) =>
+        $html_div = $('#md_html_div')
         scrollSyncor.syncScroll(editor, $html_div)
         vm.ace_editor = editor
         vm.refresh_all_notes()
@@ -62,12 +50,66 @@ markever.controller 'EditorController',
         MathJax.Hub.Queue(['Typeset', MathJax.Hub, $html_div.get(0)])
 
     # ------------------------------------------------------------------------------------------------------------------
+    # Operations for notes
+    # ------------------------------------------------------------------------------------------------------------------
+    # TODO prevent multipal duplicated requests
+    vm.refresh_all_notes = ->
+        apiClient.notes.all (notes) ->
+            vm.all_notes = notes
+
+    vm.load_note = (guid) ->
+        # check if the note to be loaded is already current note
+        if guid != vm.note.guid
+            _loading_modal = vm.open_loading_modal()
+            apiClient.notes.note({id: guid})
+                .$promise.then (data) ->
+                    # open loading modal
+                    # TODO handle other status
+                    # extract markdown
+                    enml = data.note.enml
+                    # TODO handle no md found
+                    vm.note.markdown = vm.get_md_from_enml(enml)
+                    # render html
+                    vm.md2html()
+                    # set guid
+                    vm.note.guid = data.note.guid
+                    # set title
+                    vm.note.title = data.note.title
+                    # close modal
+                    _loading_modal.close('success')
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # toolbar
+    # ------------------------------------------------------------------------------------------------------------------
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # modals
+    # ------------------------------------------------------------------------------------------------------------------
+    vm.open_ok_modal = (msg) =>
+        return $modal.open({
+            templateUrl: 'modal-ok.html',
+            size: 'sm',
+            # FIXME msg not showing
+            resolve: {
+                msg: msg
+            }
+        })
+
+    vm.open_loading_modal = ->
+        return $modal.open({
+            templateUrl: 'modal-loading.html',
+            keyboard: false,
+            size: 'sm',
+            backdrop: 'static',
+        })
+
+    # ------------------------------------------------------------------------------------------------------------------
     # save note
     # ------------------------------------------------------------------------------------------------------------------
     vm.save_note = ->
         # fill the hidden html div
         html_div_hidden = $('#md_html_div_hidden')
-        final_note_xml = enmlRenderer.getEnmlFromElement(html_div_hidden, vm.markdown)
+        final_note_xml = enmlRenderer.getEnmlFromElement(html_div_hidden, vm.note.markdown)
         # set title to content of first H1 tag
         title = 'New Note - Markever'
         if html_div_hidden.find('h1').size() > 0
@@ -219,8 +261,10 @@ markever.factory 'scrollSyncor', ->
 # Service: apiClient
 # ----------------------------------------------------------------------------------------------------------------------
 markever.factory 'apiClient', ['$resource', ($resource) ->
-    Notes = $resource('/api/v1/notes', {}, {
-        all: {method : 'GET', params : {}}
+    Notes = $resource('/api/v1/notes/:id', {id: '@id'}, {
+        all: {method : 'GET', params : {}},
+        note: {method : 'GET', params: {}},
+        newest: {method : 'GET', params : {id: 'newest'}},
     })
 
     return {

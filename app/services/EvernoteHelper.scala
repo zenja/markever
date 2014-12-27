@@ -9,9 +9,7 @@ import com.evernote.auth.EvernoteService
 import com.evernote.clients.ClientFactory
 import com.evernote.clients.NoteStoreClient
 import com.evernote.clients.UserStoreClient
-import com.evernote.edam.error.EDAMErrorCode
-import com.evernote.edam.error.EDAMSystemException
-import com.evernote.edam.error.EDAMUserException
+import com.evernote.edam.error.{EDAMNotFoundException, EDAMErrorCode, EDAMSystemException, EDAMUserException}
 import com.evernote.edam.notestore.NoteFilter
 import com.evernote.edam.notestore.NoteList
 import com.evernote.edam.`type`._
@@ -74,6 +72,17 @@ class EvernoteHelper(val token: String) {
   def allNotes(retrieveContent: Boolean = false, retrieveResources: Boolean = false): List[Note] = {
     val query = "sourceApplication:" + MarkeverConf.application_identifier
     searchNotes(query, 0, 15)
+  }
+
+  def getNote(guid: String, retrieveContent: Boolean = true, retrieveResources: Boolean = true): Option[Note] = {
+    try {
+      Some(noteStore.getNote(guid, retrieveContent, retrieveResources, false, false))
+    } catch {
+      // TODO: catch other exceptions
+      case ex: EDAMNotFoundException => {
+        None
+      }
+    }
   }
 
   /** Get the most recent updated Markever note

@@ -17,7 +17,7 @@ import com.evernote.edam.`type`._
 import com.evernote.edam.userstore._
 import com.evernote.edam.notestore._
 
-import models.Note
+import models.{Note => NoteModel}
 import services.EvernoteHelper
 
 import utils.OAuthConf
@@ -76,11 +76,11 @@ object Evernote extends Controller {
     }
   }
 
-  val noteForm: Form[Note] = Form {
+  val noteForm: Form[NoteModel] = Form {
     mapping(
       "title" -> nonEmptyText,
       "contentXmlStr" -> text
-    )(Note.apply)(Note.unapply)
+    )(NoteModel.apply)(NoteModel.unapply)
   }
 
   def createNote = Action { implicit request =>
@@ -135,6 +135,38 @@ object Evernote extends Controller {
     }
   }
 
+  def getNote(guid: String) = Action { implicit request =>
+    if (tokenExists(request.session)) {
+      val token: String = request.session.get("token").get
+      val evernoteHelper = new EvernoteHelper(token = token)
+      try {
+        val note: Option[Note] = evernoteHelper.getNote(guid)
+        if (note.isDefined) {
+          val jsonResult = Json.obj("status" -> "SUCCESS",
+            "note" -> Json.obj(
+              "title" -> note.get.getTitle,
+              "guid" -> note.get.getGuid,
+              "enml" -> note.get.getContent
+            ))
+          Ok(jsonResult)
+        } else {
+          NotFound(Json.obj("status" -> "NO_NOTE"))
+        }
+      } catch {
+        // TODO handle other exceptions
+        case ex: Throwable => {
+          // return error message
+          val jsonResult = Json.obj("status" -> "ERROR", "msg" -> ("Failed to create the note: " + ex.toString))
+          InternalServerError(jsonResult)
+        }
+      }
+    } else {
+      // token info missing, re-auth required
+      val jsonResult = Json.obj("status" -> "AUTH_REQUIRED")
+      Forbidden(jsonResult)
+    }
+  }
+
   def newestNote = Action { implicit request =>
     if (tokenExists(request.session)) {
       val token: String = request.session.get("token").get
@@ -145,13 +177,12 @@ object Evernote extends Controller {
           val jsonResult = Json.obj("status" -> "SUCCESS",
             "note" -> Json.obj("title" -> note.get.getTitle,
                                "guid" -> note.get.getGuid,
-                               "content" -> note.get.getContent)
+                               "enml" -> note.get.getContent)
           )
           Ok(jsonResult)
         } else {
-          val jsonResult = Json.obj("status" -> "NO_NOTE",
-            "note" -> Json.obj("title" -> "", "guid" -> "", "content" -> ""))
-          Ok(jsonResult)
+          val jsonResult = Json.obj("status" -> "NO_NOTE")
+          NotFound(jsonResult)
         }
       } catch {
         // TODO handle other exceptions
