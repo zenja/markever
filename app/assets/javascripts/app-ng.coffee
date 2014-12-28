@@ -54,6 +54,8 @@ markever.controller 'EditorController',
         vm.set_keyboard_handler(vm.current_keyboard_handler)
         vm.set_show_gutter(vm.current_show_gutter)
         vm.set_ace_theme(vm.current_ace_theme)
+        # reset app status
+        vm.reset_status()
 
     $scope.aceChanged = (e) ->
         $html_div = $('#md_html_div')
@@ -92,7 +94,16 @@ markever.controller 'EditorController',
                     vm.close_loading_modal()
 
     # ------------------------------------------------------------------------------------------------------------------
-    # Editor settings
+    # App Status
+    # ------------------------------------------------------------------------------------------------------------------
+    vm.saving_note = false
+    # reset status
+    vm.reset_status = ->
+        # if the note is in process of saving (syncing) or not
+        vm.saving_note = false
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # Editor Settings
     # ------------------------------------------------------------------------------------------------------------------
     # settings name constants
     vm.SETTINGS_KEY =
@@ -233,29 +244,34 @@ markever.controller 'EditorController',
     # save note
     # ------------------------------------------------------------------------------------------------------------------
     vm.save_note = ->
-        # fill the hidden html div
-        html_div_hidden = $('#md_html_div_hidden')
-        enml = enmlRenderer.getEnmlFromElement(html_div_hidden, vm.note.markdown)
-        # set title to content of first H1, H2, H3, H4 tag
-        vm.note.title = 'New Note - Markever'
-        if html_div_hidden.find('h1').size() > 0
-            vm.note.title = html_div_hidden.find('h1').text()
-        else if html_div_hidden.find('h2').size() > 0
-            vm.note.title = html_div_hidden.find('h2').text()
-        else if html_div_hidden.find('h3').size() > 0
-            vm.note.title = html_div_hidden.find('h3').text()
-        else if html_div_hidden.find('p').size() > 0
-            vm.note.title = html_div_hidden.find('p').text()
-        # invoke the api
-        # TODO handle error
-        apiClient.notes.save {
-                guid: vm.note.guid,
-                title: vm.note.title,
-                enml: enml,
-            }, (data) ->
-                # update guid
-                vm.note.guid = data.note.guid
-                alert('create/update note succeed: \n' + JSON.stringify(data))
+        if vm.saving_note == false
+            # set status
+            vm.saving_note = true
+            # fill the hidden html div
+            html_div_hidden = $('#md_html_div_hidden')
+            enml = enmlRenderer.getEnmlFromElement(html_div_hidden, vm.note.markdown)
+            # set title to content of first H1, H2, H3, H4 tag
+            vm.note.title = 'New Note - Markever'
+            if html_div_hidden.find('h1').size() > 0
+                vm.note.title = html_div_hidden.find('h1').text()
+            else if html_div_hidden.find('h2').size() > 0
+                vm.note.title = html_div_hidden.find('h2').text()
+            else if html_div_hidden.find('h3').size() > 0
+                vm.note.title = html_div_hidden.find('h3').text()
+            else if html_div_hidden.find('p').size() > 0
+                vm.note.title = html_div_hidden.find('p').text()
+            # invoke the api
+            # TODO handle error
+            apiClient.notes.save {
+                    guid: vm.note.guid,
+                    title: vm.note.title,
+                    enml: enml,
+                }, (data) ->
+                    # update guid
+                    vm.note.guid = data.note.guid
+                    # set status back
+                    vm.saving_note = false
+                    alert('create/update note succeed: \n' + JSON.stringify(data))
 #        $.post('/api/v1/notes', {title: vm.note.title, contentXmlStr: final_note_xml})
 #            .done (data) ->
 #                alert('create note succeed: \n' + JSON.stringify(data))
