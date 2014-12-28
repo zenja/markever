@@ -1,10 +1,10 @@
 "use strict"
 
-markever = angular.module('markever', ['ngResource', 'ui.ace', 'ui.bootstrap'])
+markever = angular.module('markever', ['ngResource', 'ui.ace', 'ui.bootstrap', 'LocalStorageModule'])
 
 markever.controller 'EditorController',
-['$scope', '$window', '$http', '$sce', 'enmlRenderer', 'scrollSyncor', 'apiClient',
-($scope, $window, $http, $sce, enmlRenderer, scrollSyncor, apiClient) ->
+['$scope', '$window', '$http', '$sce', 'localStorageService', 'enmlRenderer', 'scrollSyncor', 'apiClient',
+($scope, $window, $http, $sce, localStorageService, enmlRenderer, scrollSyncor, apiClient) ->
     vm = this
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -50,6 +50,10 @@ markever.controller 'EditorController',
         # set ace base path
         ace.config.set('basePath', '/javascripts/ace')
         vm.ace_editor.setTheme('ace/theme/tomorrow_night_eighties')
+        # make effect settings
+        vm.set_keyboard_handler(vm.current_keyboard_handler)
+        vm.set_show_gutter(vm.current_show_gutter)
+        vm.set_ace_theme(vm.current_ace_theme)
 
     $scope.aceChanged = (e) ->
         $html_div = $('#md_html_div')
@@ -90,30 +94,55 @@ markever.controller 'EditorController',
     # ------------------------------------------------------------------------------------------------------------------
     # Editor settings
     # ------------------------------------------------------------------------------------------------------------------
+    # settings name constants
+    vm.SETTINGS_KEY =
+        KEYBOARD_HANDLER: 'settings.keyboard_handler'
+        SHOW_GUTTER: 'settings.show_gutter'
+        ACE_THEME: 'settings.ace_theme'
+
+    # --------------------------------------------------------
     # Editor Keyboard Handler Settings
+    # --------------------------------------------------------
     vm.keyboard_handlers = [
         {name: 'normal', id: ''}
         {name: 'vim', id: 'ace/keyboard/vim'}
     ]
+    # load settings from local storage
+    if localStorageService.get(vm.SETTINGS_KEY.KEYBOARD_HANDLER) != null
+        # N.B. should be set to reference, not value!
+        saved_handler = localStorageService.get(vm.SETTINGS_KEY.KEYBOARD_HANDLER)
+        for handler in vm.keyboard_handlers
+            if saved_handler.name == handler.name
+                vm.current_keyboard_handler = handler
+                break
+    else
+        vm.current_keyboard_handler = vm.keyboard_handlers[0]
+    # "new" keyboard handler used in settings modal
     # N.B. must by reference, not value
     # refer: http://jsfiddle.net/qWzTb/
     # and: https://docs.angularjs.org/api/ng/directive/select
-    vm.current_keyboard_handler = vm.keyboard_handlers[0]
-    # "new" keyboard handler used in settings modal
-    # N.B. must by reference, not value
     vm.new_keyboard_handler = vm.current_keyboard_handler
     vm.set_keyboard_handler = (handler) ->
         vm.ace_editor.setKeyboardHandler(handler.id)
         vm.current_keyboard_handler = handler
+        localStorageService.set(vm.SETTINGS_KEY.KEYBOARD_HANDLER, JSON.stringify(handler))
 
+    # --------------------------------------------------------
     # Editor Gutter Settings
-    vm.current_show_gutter = false
+    # --------------------------------------------------------
+    if localStorageService.get(vm.SETTINGS_KEY.KEYBOARD_HANDLER) != null
+        vm.current_show_gutter = JSON.parse(localStorageService.get(vm.SETTINGS_KEY.SHOW_GUTTER))
+    else
+        vm.current_show_gutter = false
     vm.new_show_gutter = vm.show_gutter
     vm.set_show_gutter = (is_show) ->
         vm.ace_editor.renderer.setShowGutter(is_show)
         vm.current_show_gutter = is_show
+        localStorageService.set(vm.SETTINGS_KEY.SHOW_GUTTER, JSON.stringify(is_show))
 
+    # --------------------------------------------------------
     # Editor Theme Settings
+    # --------------------------------------------------------
     vm.ace_themes = [
         {name: 'default', id: ''}
         {name: 'ambiance', id: 'ace/theme/ambiance'}
@@ -149,14 +178,22 @@ markever.controller 'EditorController',
         {name: 'vibrant_ink', id: 'ace/theme/vibrant_ink'}
         {name: 'xcode', id: 'ace/theme/xcode'}
     ]
-    # N.B. must by reference, not value
-    vm.current_ace_theme = vm.ace_themes[0]
+    if localStorageService.get(vm.SETTINGS_KEY.ACE_THEME) != null
+        # N.B. should be set to reference, not value!
+        saved_ace_theme = localStorageService.get(vm.SETTINGS_KEY.ACE_THEME)
+        for theme in vm.ace_themes
+            if saved_ace_theme.name == theme.name
+                vm.current_ace_theme = theme
+                break
+    else
+        vm.current_ace_theme = vm.ace_themes[0]
     # "new" ace theme used in settings modal
     # N.B. same, must by reference, not value
     vm.new_ace_theme = vm.current_ace_theme
     vm.set_ace_theme = (theme) ->
         vm.ace_editor.setTheme(theme.id)
         vm.current_ace_theme = theme
+        localStorageService.set(vm.SETTINGS_KEY.ACE_THEME, JSON.stringify(theme))
 
     # ------------------------------------------------------------------------------------------------------------------
     # settings modal
