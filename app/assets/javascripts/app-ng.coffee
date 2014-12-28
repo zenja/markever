@@ -1,19 +1,21 @@
+"use strict"
+
 markever = angular.module('markever', ['ngResource', 'ui.ace', 'ui.bootstrap'])
 
 markever.controller 'EditorController',
-['$scope','$window', '$http', '$sce', '$modal', 'enmlRenderer', 'scrollSyncor', 'apiClient',
-($scope, $window, $http, $sce, $modal, enmlRenderer, scrollSyncor, apiClient) ->
+['$scope', '$window', '$http', '$sce', 'enmlRenderer', 'scrollSyncor', 'apiClient',
+($scope, $window, $http, $sce, enmlRenderer, scrollSyncor, apiClient) ->
     vm = this
 
     # ------------------------------------------------------------------------------------------------------------------
     # Models for notes
     # ------------------------------------------------------------------------------------------------------------------
     # current note
-    vm.note = {
-        guid: "",
-        title: "",
-        markdown: "",
-    }
+    vm.note =
+        guid: ""
+        title: ""
+        markdown: ""
+
     # note lists containing only title and guid
     vm.all_notes = {}
 
@@ -21,6 +23,7 @@ markever.controller 'EditorController',
     # ace editor
     # ------------------------------------------------------------------------------------------------------------------
     vm.ace_editor = ''
+    vm.scroll_synced = false
 
     # ------------------------------------------------------------------------------------------------------------------
     # markdown help functions
@@ -39,9 +42,14 @@ markever.controller 'EditorController',
 
     $scope.aceLoaded = (editor) =>
         $html_div = $('#md_html_div')
-        scrollSyncor.syncScroll(editor, $html_div)
+        if not vm.scroll_synced
+            scrollSyncor.syncScroll(editor, $html_div)
+            vm.scroll_synced = true
         vm.ace_editor = editor
         vm.refresh_all_notes()
+        # set ace base path
+        ace.config.set('basePath', '/javascripts/ace')
+        vm.ace_editor.setTheme('ace/theme/tomorrow_night_eighties')
 
     $scope.aceChanged = (e) ->
         $html_div = $('#md_html_div')
@@ -61,7 +69,7 @@ markever.controller 'EditorController',
     vm.load_note = (guid) ->
         # check if the note to be loaded is already current note
         if guid != vm.note.guid
-            _loading_modal = vm.open_loading_modal()
+            vm.open_loading_modal()
             apiClient.notes.note({id: guid})
                 .$promise.then (data) ->
                     # open loading modal
@@ -77,32 +85,112 @@ markever.controller 'EditorController',
                     # set title
                     vm.note.title = data.note.title
                     # close modal
-                    _loading_modal.close('success')
+                    vm.close_loading_modal()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # Editor settings
+    # ------------------------------------------------------------------------------------------------------------------
+    # Editor Keyboard Handler Settings
+    vm.keyboard_handlers = [
+        {name: 'normal', id: ''}
+        {name: 'vim', id: 'ace/keyboard/vim'}
+    ]
+    # N.B. must by reference, not value
+    # refer: http://jsfiddle.net/qWzTb/
+    # and: https://docs.angularjs.org/api/ng/directive/select
+    vm.current_keyboard_handler = vm.keyboard_handlers[0]
+    # "new" keyboard handler used in settings modal
+    # N.B. must by reference, not value
+    vm.new_keyboard_handler = vm.current_keyboard_handler
+    vm.set_keyboard_handler = (handler) ->
+        vm.ace_editor.setKeyboardHandler(handler.id)
+        vm.current_keyboard_handler = handler
+
+    # Editor Gutter Settings
+    vm.current_show_gutter = false
+    vm.new_show_gutter = vm.show_gutter
+    vm.set_show_gutter = (is_show) ->
+        vm.ace_editor.renderer.setShowGutter(is_show)
+        vm.current_show_gutter = is_show
+
+    # Editor Theme Settings
+    vm.ace_themes = [
+        {name: 'default', id: ''}
+        {name: 'ambiance', id: 'ace/theme/ambiance'}
+        {name: 'chaos', id: 'ace/theme/chaos'}
+        {name: 'chrome', id: 'ace/theme/chrome'}
+        {name: 'clouds', id: 'ace/theme/clouds'}
+        {name: 'clouds_midnight', id: 'ace/theme/clouds_midnight'}
+        {name: 'cobalt', id: 'ace/theme/cobalt'}
+        {name: 'crimson_editor', id: 'ace/theme/crimson_editor'}
+        {name: 'dawn', id: 'ace/theme/dawn'}
+        {name: 'dreamweaver', id: 'ace/theme/dreamweaver'}
+        {name: 'eclipse', id: 'ace/theme/eclipse'}
+        {name: 'github', id: 'ace/theme/github'}
+        {name: 'idle_fingers', id: 'ace/theme/idle_fingers'}
+        {name: 'katzenmilch', id: 'ace/theme/katzenmilch'}
+        {name: 'kr_theme', id: 'ace/theme/kr_theme'}
+        {name: 'kuroir', id: 'ace/theme/kuroir'}
+        {name: 'merbivore', id: 'ace/theme/merbivore'}
+        {name: 'merbivore_soft', id: 'ace/theme/merbivore_soft'}
+        {name: 'mono_industrial', id: 'ace/theme/mono_industrial'}
+        {name: 'monokai', id: 'ace/theme/monokai'}
+        {name: 'pastel_on_dark', id: 'ace/theme/pastel_on_dark'}
+        {name: 'solarized_dark', id: 'ace/theme/solarized_dark'}
+        {name: 'solarized_light', id: 'ace/theme/solarized_light'}
+        {name: 'terminal', id: 'ace/theme/terminal'}
+        {name: 'textmate', id: 'ace/theme/textmate'}
+        {name: 'tomorrow', id: 'ace/theme/tomorrow'}
+        {name: 'tomorrow_night', id: 'ace/theme/tomorrow_night'}
+        {name: 'tomorrow_night_blue', id: 'ace/theme/tomorrow_night_blue'}
+        {name: 'tomorrow_night_bright', id: 'ace/theme/tomorrow_night_bright'}
+        {name: 'tomorrow_night_eighties', id: 'ace/theme/tomorrow_night_eighties'}
+        {name: 'twilight', id: 'ace/theme/twilight'}
+        {name: 'vibrant_ink', id: 'ace/theme/vibrant_ink'}
+        {name: 'xcode', id: 'ace/theme/xcode'}
+    ]
+    # N.B. must by reference, not value
+    vm.current_ace_theme = vm.ace_themes[0]
+    # "new" ace theme used in settings modal
+    # N.B. same, must by reference, not value
+    vm.new_ace_theme = vm.current_ace_theme
+    vm.set_ace_theme = (theme) ->
+        vm.ace_editor.setTheme(theme.id)
+        vm.current_ace_theme = theme
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # settings modal
+    # ------------------------------------------------------------------------------------------------------------------
+    vm.open_settings_modal = ->
+        # reset "new" settings to current settings
+        vm.new_keyboard_handler = vm.current_keyboard_handler
+        vm.new_ace_theme = vm.current_ace_theme
+        vm.new_show_gutter = vm.current_show_gutter
+        # show modal
+        $('#settings-modal').modal({})
+        # explicit return non-DOM result to avoid warning
+        return false
+
+    vm.save_settings = ->
+        vm.set_ace_theme(vm.new_ace_theme)
+        vm.set_keyboard_handler(vm.new_keyboard_handler)
+        vm.set_show_gutter(vm.new_show_gutter)
 
     # ------------------------------------------------------------------------------------------------------------------
     # toolbar
     # ------------------------------------------------------------------------------------------------------------------
 
     # ------------------------------------------------------------------------------------------------------------------
-    # modals
+    # loading modal
     # ------------------------------------------------------------------------------------------------------------------
-    vm.open_ok_modal = (msg) =>
-        return $modal.open({
-            templateUrl: 'modal-ok.html',
-            size: 'sm',
-            # FIXME msg not showing
-            resolve: {
-                msg: msg
-            }
+    vm.open_loading_modal = ->
+        $('#loading-modal').modal({
+            backdrop: 'static'
+            keyboard: false
         })
 
-    vm.open_loading_modal = ->
-        return $modal.open({
-            templateUrl: 'modal-loading.html',
-            keyboard: false,
-            size: 'sm',
-            backdrop: 'static',
-        })
+    vm.close_loading_modal = ->
+        $('#loading-modal').modal('hide')
 
     # ------------------------------------------------------------------------------------------------------------------
     # save note
