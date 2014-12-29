@@ -23,7 +23,7 @@ markever.controller 'EditorController',
     # ace editor
     # ------------------------------------------------------------------------------------------------------------------
     vm.ace_editor = ''
-    vm.scroll_synced = false
+    vm.ace_editor_loaded = false
 
     # ------------------------------------------------------------------------------------------------------------------
     # markdown help functions
@@ -42,20 +42,22 @@ markever.controller 'EditorController',
 
     $scope.aceLoaded = (editor) =>
         $html_div = $('#md_html_div')
-        if not vm.scroll_synced
-            scrollSyncor.syncScroll(editor, $html_div)
-            vm.scroll_synced = true
         vm.ace_editor = editor
-        vm.refresh_all_notes()
-        # set ace base path
-        ace.config.set('basePath', '/javascripts/ace')
-        vm.ace_editor.setTheme('ace/theme/tomorrow_night_eighties')
-        # make effect settings
-        vm.set_keyboard_handler(vm.current_keyboard_handler)
-        vm.set_show_gutter(vm.current_show_gutter)
-        vm.set_ace_theme(vm.current_ace_theme)
-        # reset app status
-        vm.reset_status()
+        if not vm.ace_editor_loaded
+            # sync scroll
+            scrollSyncor.syncScroll(editor, $html_div)
+            vm.ace_editor_loaded = true
+            # get note list
+            vm.refresh_all_notes()
+            # set ace base path
+            ace.config.set('basePath', '/javascripts/ace')
+            vm.ace_editor.setTheme('ace/theme/tomorrow_night_eighties')
+            # make effect settings
+            vm.set_keyboard_handler(vm.current_keyboard_handler)
+            vm.set_show_gutter(vm.current_show_gutter)
+            vm.set_ace_theme(vm.current_ace_theme)
+            # reset app status
+            vm.reset_status()
 
     $scope.aceChanged = (e) ->
         $html_div = $('#md_html_div')
