@@ -39,6 +39,7 @@ object Evernote extends Controller {
 
   def authenticate = Action { request =>
     request.queryString.get("oauth_verifier").flatMap(_.headOption).map { verifier =>
+      // TODO can get always success? can it be None?
       val tokenPair = sessionTokenPair(request).get
       // We got the verifier; now get the access token, store it and back to index
       EVERNOTE.retrieveAccessToken(tokenPair, verifier) match {
@@ -210,6 +211,6 @@ object Evernote extends Controller {
    */
   def tokenExists(session: Session): Boolean = {
     val token: Option[String] = session.get("token")
-    return token.isDefined
+    token.isDefined
   }
 }

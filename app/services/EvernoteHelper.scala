@@ -50,7 +50,7 @@ class EvernoteHelper(val token: String) {
     // such as title, GUID, creation date, update date, etc. The note content
     // and binary resource data are omitted, although resource metadata is included.
     // To get the note content and/or binary resources, call getNote() using the note's GUID.
-    return if (retrieveContent || retrieveResources) {
+    if (retrieveContent || retrieveResources) {
       val notes = new ListBuffer[Note]
       val iter = noteList.getNotesIterator
       while (iter.hasNext) {
@@ -76,6 +76,7 @@ class EvernoteHelper(val token: String) {
 
   def getNote(guid: String, retrieveContent: Boolean = true, retrieveResources: Boolean = true): Option[Note] = {
     try {
+      // TODO when not found, return None
       Some(noteStore.getNote(guid, retrieveContent, retrieveResources, false, false))
     } catch {
       // TODO: catch other exceptions
@@ -95,7 +96,7 @@ class EvernoteHelper(val token: String) {
     val query = "sourceApplication:" + MarkeverConf.application_identifier
     val notes: List[Note] = searchNotes(query, 0, 1,
       retrieveContent = retrieveContent, retrieveResources = retrieveResources)
-    return if (notes.length == 1) {
+    if (notes.length == 1) {
       Some(notes(0))
     } else {
       None
@@ -104,17 +105,18 @@ class EvernoteHelper(val token: String) {
 
   // TODO only update title or content if changed
   def updateNote(title: String, enml: String, guid: String = "") : Note = {
-    return if (guid.isEmpty) {
+    if (guid.isEmpty) {
       createNote(title, enml)
     } else {
       // TODO resources loading
       val note = getNote(guid, false, false)
-      if (note.isDefined) {
-        note.get.setTitle(title)
-        note.get.setContent(enml)
-        noteStore.updateNote(note.get)
-      } else {
-        createNote(title, enml)
+      note match {
+        case Some(n) => {
+          n.setTitle(title)
+          n.setContent(enml)
+          noteStore.updateNote(n)
+        }
+        case None => createNote(title, enml)
       }
     }
   }
@@ -127,7 +129,7 @@ class EvernoteHelper(val token: String) {
     note.setContent(enml)
     note.setAttributes(noteAttribute)
     val createdNote: Note = noteStore.createNote(note)
-    return createdNote
+    createdNote
   }
 
   // -------------------------------------------------------------------------------------------------------------------
@@ -151,7 +153,7 @@ class EvernoteHelper(val token: String) {
     println("Successfully created a new note with GUID: " + newNote.getGuid)
     println("Note's source application: " + newNote.getAttributes.getSourceApplication)
     println
-    return newNote
+    newNote
   }
 
   // test
