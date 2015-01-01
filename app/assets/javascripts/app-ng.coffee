@@ -1,10 +1,10 @@
 "use strict"
 
-markever = angular.module('markever', ['ngResource', 'ui.ace', 'ui.bootstrap', 'LocalStorageModule'])
+markever = angular.module('markever', ['ngResource', 'ui.ace', 'ui.bootstrap', 'LocalStorageModule', 'angularUUID2'])
 
 markever.controller 'EditorController',
-['$scope', '$window', '$http', '$sce', 'localStorageService', 'enmlRenderer', 'scrollSyncor', 'apiClient',
-($scope, $window, $http, $sce, localStorageService, enmlRenderer, scrollSyncor, apiClient) ->
+['$scope', '$window', '$http', '$sce', 'localStorageService', 'uuid2', 'enmlRenderer', 'scrollSyncor', 'apiClient',
+($scope, $window, $http, $sce, localStorageService, uuid2, enmlRenderer, scrollSyncor, apiClient) ->
     vm = this
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -25,21 +25,6 @@ markever.controller 'EditorController',
     vm.ace_editor = ''
     vm.ace_editor_loaded = false
 
-    # ------------------------------------------------------------------------------------------------------------------
-    # markdown help functions
-    # ------------------------------------------------------------------------------------------------------------------
-    vm.md2html = ->
-        vm.html = $window.marked(vm.note.markdown)
-        vm.htmlSafe = $sce.trustAsHtml(vm.html)
-
-    vm.get_md_from_enml = (enml) ->
-        enml.replace(/<\?xml version="1\.0" encoding="utf-8"\?>/i, '')
-        enml.replace(/<!DOCTYPE en-note SYSTEM "http:\/\/xml\.evernote\.com\/pub\/enml2\.dtd">/i, '')
-        enml.replace(/<en-note>/i, '')
-        enml.replace(/<\/en-note>/i, '')
-        # TODO handle no md found
-        return $(enml).find('center').text()
-
     $scope.aceLoaded = (editor) =>
         $html_div = $('#md_html_div')
         vm.ace_editor = editor
@@ -58,12 +43,44 @@ markever.controller 'EditorController',
             vm.set_ace_theme(vm.current_ace_theme)
             # reset app status
             vm.reset_status()
+            # set focus
+            editor.focus()
 
-    $scope.aceChanged = (e) ->
-        $html_div = $('#md_html_div')
-        $html_div.find('pre code').each (i, block) ->
+    vm.html_post_process = (jq_html_div) ->
+        # code highliting
+        jq_html_div.find('pre code').each (i, block) ->
             hljs.highlightBlock(block)
-        MathJax.Hub.Queue(['Typeset', MathJax.Hub, $html_div.get(0)])
+        # render Latax
+        MathJax.Hub.Queue(['Typeset', MathJax.Hub, jq_html_div.get(0)])
+        # change img src to real data url
+        jq_html_div.find('img[src]').each (index) ->
+            $img = $(this)
+            uuid = $img.attr('src')
+            data_src = vm.image_manager.get_image_data_from_uuid(uuid)
+            if data_src
+                $img.attr('longdesc', uuid)
+                $img.attr('src', data_src)
+
+    vm.editor_content_changed = (event) ->
+        # TODO optimize performance
+        vm.html_post_process($('#md_html_div'))
+
+    $scope.aceChanged = vm.editor_content_changed
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # markdown help functions
+    # ------------------------------------------------------------------------------------------------------------------
+    vm.md2html = ->
+        vm.html = $window.marked(vm.note.markdown)
+        vm.htmlSafe = $sce.trustAsHtml(vm.html)
+
+    vm.get_md_from_enml = (enml) ->
+        enml.replace(/<\?xml version="1\.0" encoding="utf-8"\?>/i, '')
+        enml.replace(/<!DOCTYPE en-note SYSTEM "http:\/\/xml\.evernote\.com\/pub\/enml2\.dtd">/i, '')
+        enml.replace(/<en-note>/i, '')
+        enml.replace(/<\/en-note>/i, '')
+        # TODO handle no md found
+        return $(enml).find('center').text()
 
     # ------------------------------------------------------------------------------------------------------------------
     # Operations for notes
@@ -209,6 +226,50 @@ markever.controller 'EditorController',
         localStorageService.set(vm.SETTINGS_KEY.ACE_THEME, JSON.stringify(theme))
 
     # ------------------------------------------------------------------------------------------------------------------
+    # on paste
+    # ------------------------------------------------------------------------------------------------------------------
+    vm.handle_paste = (e) =>
+        if not vm.ace_editor.isFocused
+            return false
+        items = (e.clipboardData || e.originalEvent.clipboardData).items
+        console.log(JSON.stringify(items))
+        if items[0].type.match(/image.*/)
+            blob = items[0].getAsFile()
+            image_info = vm.image_manager.load_image_blob(blob)
+            vm.ace_editor.insert('![Alt text](' + image_info.uuid + ')')
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # image handler
+    # ------------------------------------------------------------------------------------------------------------------
+    class ImageManager
+        _image_data_map: {}
+
+        get_image_data_from_uuid: (uuid) =>
+            return @_image_data_map[uuid]
+
+        # param data is base64 data url
+        add_image_data_mapping: (uuid, data) =>
+            @_image_data_map[uuid] = data
+
+        load_image_blob: (blob, extra_handler) =>
+            uuid = uuid2.newuuid()
+            reader = new FileReader()
+            reader.onload = (event) =>
+                console.log("image result: " + event.target.result)
+                @add_image_data_mapping(uuid, event.target.result)
+                # optional extra_handler
+                if extra_handler
+                    extra_handler(event)
+            # start reading blob data, and get result in base64 data URL
+            reader.readAsDataURL(blob)
+            return {
+                uuid: uuid
+                data: @get_image_data_from_uuid(uuid)
+            }
+
+    vm.image_manager = new ImageManager
+
+    # ------------------------------------------------------------------------------------------------------------------
     # settings modal
     # ------------------------------------------------------------------------------------------------------------------
     vm.open_settings_modal = ->
@@ -251,7 +312,12 @@ markever.controller 'EditorController',
             vm.saving_note = true
             # fill the hidden html div
             html_div_hidden = $('#md_html_div_hidden')
-            enml = enmlRenderer.getEnmlFromElement(html_div_hidden, vm.note.markdown)
+            enml = enmlRenderer.getEnmlFromElement(
+                html_div_hidden,
+                vm.html_post_process,
+                vm.note.markdown,
+                vm.image_manager
+            )
             # set title to content of first H1, H2, H3, H4 tag
             vm.note.title = 'New Note - Markever'
             if html_div_hidden.find('h1').size() > 0
@@ -286,14 +352,16 @@ markever.controller 'EditorController',
 # Service: enmlRenderer
 # ----------------------------------------------------------------------------------------------------------------------
 angular.module('markever').factory 'enmlRenderer', ->
-    getEnmlFromElement = (jq_element, markdown) ->
-        # highlight code & style Latex
-        jq_element.find('pre code').each (i, block) ->
-            hljs.highlightBlock(block)
-        MathJax.Hub.Queue(['Typeset', MathJax.Hub, jq_element.get(0)])
+    getEnmlFromElement = (jq_html_div, html_post_process_func, markdown, image_manager) ->
+        # html post process
+        html_post_process_func(jq_html_div)
 
+        # further post process
         # remove all script tags
-        jq_element.find('script').remove()
+        jq_html_div.find('script').remove()
+
+        # set src of img to full data url
+        jq_html_div.find('img[src]').attr 'src', (i, src) ->
 
         # add inline style
         # refer: https://github.com/Karl33to/jquery.inlineStyler
@@ -324,10 +392,10 @@ angular.module('markever').factory 'enmlRenderer', ->
                 'border-matters' : ['HR', 'BLOCKQUOTE', 'SPAN', 'PRE', 'CODE'],
             }
         }
-        jq_element.inlineStyler(inline_styler_option)
+        jq_html_div.inlineStyler(inline_styler_option)
 
         # set href to start with 'http' is no protocol assigned
-        jq_element.find('a').attr 'href', (i, href) ->
+        jq_html_div.find('a').attr 'href', (i, href) ->
             if not href.toLowerCase().match('(^http)|(^https)|(^file)')
                 return 'http://' + href
             else
@@ -345,7 +413,7 @@ angular.module('markever').factory 'enmlRenderer', ->
             allowedAttributes: [['href', ['a']], ['style']],
             removeAttrs: ['id', 'class', 'onclick', 'ondblclick', 'accesskey', 'data', 'dynsrc', 'tabindex',],
         }
-        cleaned_html = $.htmlClean(jq_element.html(), html_clean_option);
+        cleaned_html = $.htmlClean(jq_html_div.html(), html_clean_option);
         # FIXME hack for strange class attr not removed
         cleaned_html = cleaned_html.replace(/class='[^']*'/g, '')
         cleaned_html = cleaned_html.replace(/class="[^"]*"/g, '')
