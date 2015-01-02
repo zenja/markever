@@ -334,21 +334,24 @@ markever.controller 'EditorController',
                 vm.note.title = text if text.trim().length > 0
             # invoke the api
             # TODO handle error
-            apiClient.notes.save {
+            apiClient.notes.save({
                     guid: vm.note.guid,
                     title: vm.note.title,
                     enml: enml,
-                }, (data) ->
-                    # update guid
-                    vm.note.guid = data.note.guid
-                    # set status back
-                    vm.saving_note = false
-                    alert('create/update note succeed: \n' + JSON.stringify(data))
-#        $.post('/api/v1/notes', {title: vm.note.title, contentXmlStr: final_note_xml})
-#            .done (data) ->
-#                alert('create note succeed: \n' + JSON.stringify(data))
-#            .fail (data) ->
-#                alert('create note failed: \n' + JSON.stringify(data))
+                }).$promise.then(
+                    (data) ->
+                        # update guid
+                        vm.note.guid = data.note.guid
+                        # set status back
+                        vm.saving_note = false
+                        alert('create/update note succeed: \n' + JSON.stringify(data))
+                    (error) ->
+                        # set status back
+                        vm.saving_note = false
+                        alert('create note failed: \n' + JSON.stringify(error))
+                        console.log(JSON.stringify(error))
+                )
+
 ]
 
 
