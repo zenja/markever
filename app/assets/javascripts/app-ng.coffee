@@ -321,13 +321,17 @@ markever.controller 'EditorController',
             # set title to content of first H1, H2, H3, H4 tag
             vm.note.title = 'New Note - Markever'
             if html_div_hidden.find('h1').size() > 0
-                vm.note.title = html_div_hidden.find('h1').text()
+                text = html_div_hidden.find('h1').text()
+                vm.note.title = text if text.trim().length > 0
             else if html_div_hidden.find('h2').size() > 0
-                vm.note.title = html_div_hidden.find('h2').text()
+                text = html_div_hidden.find('h2').text()
+                vm.note.title = text if text.trim().length > 0
             else if html_div_hidden.find('h3').size() > 0
-                vm.note.title = html_div_hidden.find('h3').text()
+                text = html_div_hidden.find('h3').text()
+                vm.note.title = text if text.trim().length > 0
             else if html_div_hidden.find('p').size() > 0
-                vm.note.title = html_div_hidden.find('p').text()
+                text = html_div_hidden.find('p').text()
+                vm.note.title = text if text.trim().length > 0
             # invoke the api
             # TODO handle error
             apiClient.notes.save {
