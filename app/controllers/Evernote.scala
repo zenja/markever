@@ -148,16 +148,19 @@ object Evernote extends Controller {
       val evernoteHelper = new EvernoteHelper(token = token)
       try {
         val note: Option[Note] = evernoteHelper.getNote(guid)
-        if (note.isDefined) {
-          val jsonResult = Json.obj("status" -> "SUCCESS",
-            "note" -> Json.obj(
-              "title" -> note.get.getTitle,
-              "guid" -> note.get.getGuid,
-              "enml" -> note.get.getContent
-            ))
-          Ok(jsonResult)
-        } else {
-          NotFound(Json.obj("status" -> "NO_NOTE"))
+        note match {
+          case Some(n) => {
+            val jsonResult = Json.obj(
+              "status" -> "SUCCESS",
+              "note" -> Json.obj(
+                "title" -> n.getTitle,
+                "guid" -> n.getGuid,
+                "enml" -> n.getContent
+              )
+            )
+            Ok(jsonResult)
+          }
+          case None => NotFound(Json.obj("status" -> "NO_NOTE"))
         }
       } catch {
         // TODO handle other exceptions
@@ -180,16 +183,21 @@ object Evernote extends Controller {
       val evernoteHelper = new EvernoteHelper(token = token)
       try {
         val note = evernoteHelper.newestNote(retrieveContent = true)
-        if (note.isDefined) {
-          val jsonResult = Json.obj("status" -> "SUCCESS",
-            "note" -> Json.obj("title" -> note.get.getTitle,
-                               "guid" -> note.get.getGuid,
-                               "enml" -> note.get.getContent)
-          )
-          Ok(jsonResult)
-        } else {
-          val jsonResult = Json.obj("status" -> "NO_NOTE")
-          NotFound(jsonResult)
+        note match {
+          case Some(n) => {
+            val jsonResult = Json.obj("status" -> "SUCCESS",
+              "note" -> Json.obj(
+                "title" -> n.getTitle,
+                "guid" -> n.getGuid,
+                "enml" -> n.getContent
+              )
+            )
+            Ok(jsonResult)
+          }
+          case None => {
+            val jsonResult = Json.obj("status" -> "NO_NOTE")
+            NotFound(jsonResult)
+          }
         }
       } catch {
         // TODO handle other exceptions
