@@ -20,6 +20,8 @@ import com.evernote.thrift.transport.TTransportException
 import scala.collection.mutable.ListBuffer
 import scala.io.Source
 
+import org.apache.commons.codec.binary.Base64
+
 // refer to: https://github.com/evernote/evernote-sdk-java/blob/master/sample/client/EDAMDemo.java
 class EvernoteHelper(val token: String) {
 
@@ -240,17 +242,18 @@ object EvernoteHelper {
     *         None           if dataURL is not valid
     */
   def makeResourceFromDataURL(dataURL: String, uuid: String): Option[Resource] = {
-    import org.apache.commons.codec.binary.Base64
     // check dataURL is in correct format
     val dataURLRegex = "^data:([^;]*);base64,(.*)$".r
     if (dataURLRegex.pattern.matcher(dataURL).matches) {
       val dataURLRegex(mimeType, base64) = dataURL
+
       // make resource data
       val dataByteArr = Base64.decodeBase64(base64)
       val resourceData = new Data()
       resourceData.setSize(dataByteArr.length)
       resourceData.setBodyHash(MessageDigest.getInstance("MD5").digest(dataByteArr))
       resourceData.setBody(dataByteArr)
+
       // make resource object
       val resource = new Resource()
       resource.setData(resourceData)
@@ -258,10 +261,11 @@ object EvernoteHelper {
       val attributes = new ResourceAttributes()
       attributes.setFileName(uuid)
       resource.setAttributes(attributes)
-      return Some(resource)
+
+      Some(resource)
     } else {
       // if dataURL not valid, return None
-      return None
+      None
     }
   }
 
@@ -269,6 +273,23 @@ object EvernoteHelper {
    * Helper method to convert a byte array to a hexadecimal string.
    */
   def bytesToHex(buf: Array[Byte]): String = buf.map("%02X" format _).mkString
+
+
+  /**
+   * Helper method to construct data URL from Resource object
+   */
+  def makeDataURL(resource: Resource): String = {
+    val base64: String = Base64.encodeBase64String(resource.getData.getBody)
+    val mime: String = resource.getMime
+    "data:" + mime + ";base64," + base64
+  }
+
+  /**
+   * Helper method to get UUID (filename) from a Resource
+   */
+  def getUUID(resource: Resource): String = {
+    resource.getAttributes.getFileName
+  }
 }
 
 import scala.xml.Elem

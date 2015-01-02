@@ -23,6 +23,7 @@ import services.EvernoteHelper
 import utils.OAuthConf
 
 import scala.collection.JavaConversions._
+import scala.collection.mutable.ListBuffer
 
 object Evernote extends Controller {
 
@@ -147,15 +148,22 @@ object Evernote extends Controller {
       val token: String = request.session.get("token").get
       val evernoteHelper = new EvernoteHelper(token = token)
       try {
-        val note: Option[Note] = evernoteHelper.getNote(guid)
+        val note: Option[Note] = evernoteHelper.getNote(guid = guid, retrieveContent = true, retrieveResources = true)
         note match {
           case Some(n) => {
+            val resourceInfoList = new ListBuffer[JsObject]
+            for (r <- n.getResources) {
+              val uuid = EvernoteHelper.getUUID(r)
+              val dataURL = EvernoteHelper.makeDataURL(r)
+              resourceInfoList.append(Json.obj("uuid" -> uuid, "data_url" -> dataURL))
+            }
             val jsonResult = Json.obj(
               "status" -> "SUCCESS",
               "note" -> Json.obj(
                 "title" -> n.getTitle,
                 "guid" -> n.getGuid,
-                "enml" -> n.getContent
+                "enml" -> n.getContent,
+                "resources" -> JsArray(resourceInfoList)
               )
             )
             Ok(jsonResult)
