@@ -94,7 +94,7 @@ object Evernote extends Controller {
       try {
         val note = evernoteHelper.updateNote(
           title = noteFormData.title,
-          enml = noteFormData.enml,
+          enmlNotTransformed = noteFormData.enml,
           guid = noteFormData.guid
         )
         val jsonResult = Json.obj("status" -> "SUCCESS", "note" -> Json.obj("guid" -> note.getGuid))

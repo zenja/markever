@@ -1,5 +1,7 @@
 package services
 
+import java.security.MessageDigest
+
 import utils.MarkeverConf
 
 import scala.collection.JavaConverters._
@@ -104,30 +106,38 @@ class EvernoteHelper(val token: String) {
   }
 
   // TODO only update title or content if changed
-  def updateNote(title: String, enml: String, guid: String = "") : Note = {
+  def updateNote(title: String, enmlNotTransformed: String, guid: String = "") : Note = {
+    val (finalEnml, resourceList) = EvernoteHelper.transformImgToResource(enmlNotTransformed)
+
     if (guid.isEmpty) {
-      createNote(title, enml)
+      createNote(title, finalEnml, resourceList)
     } else {
       // TODO resources loading
       val note = getNote(guid, false, false)
       note match {
         case Some(n) => {
           n.setTitle(title)
-          n.setContent(enml)
+          n.setContent(finalEnml)
+          for (r <- resourceList) {
+            n.addToResources(r)
+          }
           noteStore.updateNote(n)
         }
-        case None => createNote(title, enml)
+        case None => createNote(title, finalEnml, resourceList)
       }
     }
   }
 
-  def createNote(title: String, enml: String) : Note = {
+  def createNote(title: String, finalEnml: String, resourceList: List[Resource]) : Note = {
     val note = new Note()
     val noteAttribute = new NoteAttributes()
     noteAttribute.setSourceApplication(MarkeverConf.application_identifier)
     note.setTitle(title)
-    note.setContent(enml)
+    note.setContent(finalEnml)
     note.setAttributes(noteAttribute)
+    for (r <- resourceList) {
+      note.addToResources(r)
+    }
     val createdNote: Note = noteStore.createNote(note)
     createdNote
   }
@@ -149,7 +159,7 @@ class EvernoteHelper(val token: String) {
   // test
   def tryCreateNote : Note = {
     val contentXmlStr = EvernoteHelper.wrapInENML("<div><p>This note is created by Scala code!</p></div>")
-    val newNote = updateNote(title = "Success!", enml = contentXmlStr)
+    val newNote = updateNote(title = "Success!", enmlNotTransformed = contentXmlStr)
     println("Successfully created a new note with GUID: " + newNote.getGuid)
     println("Note's source application: " + newNote.getAttributes.getSourceApplication)
     println
@@ -171,16 +181,105 @@ class EvernoteHelper(val token: String) {
         .replaceAll("role=\"[^\"]*\"", "") +
       "</en-note>"
     println(content)
-    val newNote = createNote(title = "Rich note!", enml = content)
+    val newNote = createNote(title = "Rich note!", finalEnml = content, resourceList = List())
     println("Successfully created a new note with GUID: " + newNote.getGuid);
     println
   }
 }
 
+
 object EvernoteHelper {
+  import scala.xml._
+
   def wrapInENML(innerHTML: String) : String = {
     "<?xml version='1.0' encoding='utf-8'?>" +
       "<!DOCTYPE en-note SYSTEM 'http://xml.evernote.com/pub/enml2.dtd'>" +
       s"<en-note>$innerHTML</en-note>"
+  }
+
+  def transformImgToResource(enmlStr: String): (String, List[Resource]) = {
+    val resourceLB: ListBuffer[Resource] = new ListBuffer[Resource]
+
+    def extractImages(node: Node): Node = {
+      def handle(seq: Seq[Node]) : Seq[Node] =
+        for(subNode <- seq) yield extractImages(subNode)
+
+      node match {
+        case img @ <img /> => {
+          // assume img has 'src' and 'longdesc' attributes
+          val resource = makeResourceFromDataURL(dataURL = (img \ "@src").toString, uuid = (img \ "@longdesc").toString())
+          resource match {
+            case Some(n) => {
+              val enMediaXmlStr =
+                "<en-media type=\"" + n.getMime + "\" hash=\"" + bytesToHex(n.getData().getBodyHash()) + "\"/>"
+              resourceLB.append(n)
+              XML.loadString(enMediaXmlStr)
+            }
+            case None => <p>Invalid Image</p>
+          }
+        }
+        case node: NodeSeq if !node.isAtom => {
+          <xml>{handle(node.child)}</xml>.copy(label = node.label, attributes = node.attributes)
+        }
+        case other @ _ => other
+      }
+    }
+
+    val enml: Node = NonValidatingXMLLoader.loadString(enmlStr)
+    val transformedEnmlStr =
+      "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+        "<!DOCTYPE en-note SYSTEM \"http://xml.evernote.com/pub/enml2.dtd\">" +
+        extractImages(enml).toString
+    return (transformedEnmlStr, resourceLB.toList)
+  }
+
+  /** Make a Evernote Resource object based on a data URL containing mime and base64 encoded data
+    *
+    * @param dataURL
+    * @return Some[Resource] if dataURL is valid
+    *         None           if dataURL is not valid
+    */
+  def makeResourceFromDataURL(dataURL: String, uuid: String): Option[Resource] = {
+    import org.apache.commons.codec.binary.Base64
+    // check dataURL is in correct format
+    val dataURLRegex = "^data:([^;]*);base64,(.*)$".r
+    if (dataURLRegex.pattern.matcher(dataURL).matches) {
+      val dataURLRegex(mimeType, base64) = dataURL
+      // make resource data
+      val dataByteArr = Base64.decodeBase64(base64)
+      val resourceData = new Data()
+      resourceData.setSize(dataByteArr.length)
+      resourceData.setBodyHash(MessageDigest.getInstance("MD5").digest(dataByteArr))
+      resourceData.setBody(dataByteArr)
+      // make resource object
+      val resource = new Resource()
+      resource.setData(resourceData)
+      resource.setMime(mimeType)
+      val attributes = new ResourceAttributes()
+      attributes.setFileName(uuid)
+      resource.setAttributes(attributes)
+      return Some(resource)
+    } else {
+      // if dataURL not valid, return None
+      return None
+    }
+  }
+
+  /**
+   * Helper method to convert a byte array to a hexadecimal string.
+   */
+  def bytesToHex(buf: Array[Byte]): String = buf.map("%02X" format _).mkString
+}
+
+import scala.xml.Elem
+import scala.xml.factory.XMLLoader
+import javax.xml.parsers.SAXParser
+
+object NonValidatingXMLLoader extends XMLLoader[Elem] {
+  override def parser: SAXParser = {
+    val f = javax.xml.parsers.SAXParserFactory.newInstance()
+    f.setValidating(false)
+    f.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+    f.newSAXParser()
   }
 }
