@@ -417,7 +417,7 @@ angular.module('markever').factory 'enmlRenderer', ->
                           'hr', 'i', 'img', 'ins', 'kbd', 'li', 'map', 'ol', 'p', 'pre', 'q', 's',
                           'samp', 'small', 'span', 'strike', 'strong', 'sub', 'sup', 'table', 'tbody',
                           'td', 'tfoot', 'th', 'thead', 'title', 'tr', 'tt', 'u', 'ul', 'var', 'xmp',],
-            allowedAttributes: [['href', ['a']], ['style']],
+            allowedAttributes: [['href', ['a']], ['longdesc'], ['style']],
             removeAttrs: ['id', 'class', 'onclick', 'ondblclick', 'accesskey', 'data', 'dynsrc', 'tabindex',],
         }
         cleaned_html = $.htmlClean(jq_html_div.html(), html_clean_option);
