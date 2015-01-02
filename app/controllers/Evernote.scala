@@ -151,6 +151,7 @@ object Evernote extends Controller {
         val note: Option[Note] = evernoteHelper.getNote(guid = guid, retrieveContent = true, retrieveResources = true)
         note match {
           case Some(n) => {
+            // make resources data
             val resourceInfoList = new ListBuffer[JsObject]
             for (r <- n.getResources) {
               val uuid = EvernoteHelper.getUUID(r)
@@ -162,7 +163,7 @@ object Evernote extends Controller {
               "note" -> Json.obj(
                 "title" -> n.getTitle,
                 "guid" -> n.getGuid,
-                "enml" -> n.getContent,
+                "md" -> EvernoteHelper.getMarkdownInENML(n.getContent),
                 "resources" -> JsArray(resourceInfoList)
               )
             )

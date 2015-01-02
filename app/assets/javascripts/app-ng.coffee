@@ -68,19 +68,11 @@ markever.controller 'EditorController',
     $scope.aceChanged = vm.editor_content_changed
 
     # ------------------------------------------------------------------------------------------------------------------
-    # markdown help functions
+    # markdown helper functions
     # ------------------------------------------------------------------------------------------------------------------
     vm.md2html = ->
         vm.html = $window.marked(vm.note.markdown)
         vm.htmlSafe = $sce.trustAsHtml(vm.html)
-
-    vm.get_md_from_enml = (enml) ->
-        enml.replace(/<\?xml version="1\.0" encoding="utf-8"\?>/i, '')
-        enml.replace(/<!DOCTYPE en-note SYSTEM "http:\/\/xml\.evernote\.com\/pub\/enml2\.dtd">/i, '')
-        enml.replace(/<en-note>/i, '')
-        enml.replace(/<\/en-note>/i, '')
-        # TODO handle no md found
-        return $(enml).find('center').text()
 
     # ------------------------------------------------------------------------------------------------------------------
     # Operations for notes
@@ -97,21 +89,18 @@ markever.controller 'EditorController',
             vm.open_loading_modal()
             apiClient.notes.note({id: guid})
                 .$promise.then (data) ->
-                    # open loading modal
                     # TODO handle other status
                     # extract markdown
-                    enml = data.note.enml
+                    md = data.note.md
                     # register resource data into ImageManager
                     for r in data.note.resources
                         vm.image_manager.add_image_data_mapping(r.uuid, r.data_url)
                         console.log("register uuid: " + r.uuid + " data len: " + r.data_url.length)
-                    # TODO handle no md found
-                    vm.note.markdown = vm.get_md_from_enml(enml)
+                    vm.note.markdown = md
                     # render html
                     vm.md2html()
-                    # set guid
+                    # set note info
                     vm.note.guid = data.note.guid
-                    # set title
                     vm.note.title = data.note.title
                     # close modal
                     vm.close_loading_modal()

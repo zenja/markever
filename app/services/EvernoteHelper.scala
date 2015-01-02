@@ -274,7 +274,6 @@ object EvernoteHelper {
    */
   def bytesToHex(buf: Array[Byte]): String = buf.map("%02X" format _).mkString
 
-
   /**
    * Helper method to construct data URL from Resource object
    */
@@ -289,6 +288,14 @@ object EvernoteHelper {
    */
   def getUUID(resource: Resource): String = {
     resource.getAttributes.getFileName
+  }
+
+  /**
+   * Helper method to extract the hidden Markdown in ENML
+   */
+  def getMarkdownInENML(enmlStr: String): String = {
+    val enml: Node = NonValidatingXMLLoader.loadString(enmlStr)
+    (enml \\ "center").text
   }
 }
 
