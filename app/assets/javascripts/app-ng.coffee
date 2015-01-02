@@ -101,6 +101,10 @@ markever.controller 'EditorController',
                     # TODO handle other status
                     # extract markdown
                     enml = data.note.enml
+                    # register resource data into ImageManager
+                    for r in data.note.resources
+                        vm.image_manager.add_image_data_mapping(r.uuid, r.data_url)
+                        console.log("register uuid: " + r.uuid + " data len: " + r.data_url.length)
                     # TODO handle no md found
                     vm.note.markdown = vm.get_md_from_enml(enml)
                     # render html
