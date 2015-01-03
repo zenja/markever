@@ -12,9 +12,19 @@
             z-index: 999;
             top: 0;
             left: 0;
-            height:100%;
-            width:100%;
-            background: #000;
+            height: 100%;
+            width: 100%;
+            background: #fff;
+        }
+        .splash-content {
+            text-align: center;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            /* bring your own prefixes */
+            transform: translate(-50%, -50%);
+            -webkit-transform: translate(-50%, -50%);
+            -o-transform-origin: translate(-50%, -50%);
         }
     </style>
 
@@ -32,7 +42,10 @@
 </head>
 <body ng-app="markever" ng-controller="EditorController as main">
     <div class="splash" ng-show="!main.all_ready">
-        <h2>Loading</h2>
+        <div class="splash-content">
+            <h1>Markever</h1>
+            <p>Loading...</p>
+        </div>
     </div>
 
     <!-- Toolbar -->
