@@ -31,6 +31,11 @@ markever.controller 'EditorController',
     vm.all_notes = {}
 
     # ------------------------------------------------------------------------------------------------------------------
+    # App ready status
+    # ------------------------------------------------------------------------------------------------------------------
+    vm.all_ready = false
+
+    # ------------------------------------------------------------------------------------------------------------------
     # Document ready
     # ------------------------------------------------------------------------------------------------------------------
     $document.ready ->
@@ -45,9 +50,8 @@ markever.controller 'EditorController',
         vm.ace_editor.on 'change', vm.editor_content_changed
         vm.ace_editor.focus()
 
-        $html_div = $('#md_html_div')
         # sync scroll
-        scrollSyncor.syncScroll(vm.ace_editor, $html_div)
+        scrollSyncor.syncScroll(vm.ace_editor, $('#md_html_div'))
 
         # get note list
         vm.refresh_all_notes()
@@ -59,6 +63,9 @@ markever.controller 'EditorController',
 
         # reset app status
         vm.reset_status()
+
+        # all ready
+        vm.all_ready = true
 
     # ------------------------------------------------------------------------------------------------------------------
     # ace editor event handlers
