@@ -175,7 +175,7 @@ object Evernote extends Controller {
         // TODO handle other exceptions
         case ex: Throwable => {
           // return error message
-          val jsonResult = Json.obj("status" -> "ERROR", "msg" -> ("Failed to create the note: " + ex.toString))
+          val jsonResult = Json.obj("status" -> "ERROR", "msg" -> ("Failed to fetch the note: " + ex.toString))
           InternalServerError(jsonResult)
         }
       }

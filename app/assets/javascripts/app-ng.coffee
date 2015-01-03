@@ -1,10 +1,10 @@
 "use strict"
 
-markever = angular.module('markever', ['ngResource', 'ui.ace', 'ui.bootstrap', 'LocalStorageModule', 'angularUUID2'])
+markever = angular.module('markever', ['ngResource', 'ui.bootstrap', 'LocalStorageModule', 'angularUUID2'])
 
 markever.controller 'EditorController',
-['$scope', '$window', '$http', '$sce', 'localStorageService', 'uuid2', 'enmlRenderer', 'scrollSyncor', 'apiClient',
-($scope, $window, $http, $sce, localStorageService, uuid2, enmlRenderer, scrollSyncor, apiClient) ->
+['$scope', '$window', '$document', '$http', '$sce', 'localStorageService', 'uuid2', 'enmlRenderer', 'scrollSyncor', 'apiClient',
+($scope, $window, $document, $http, $sce, localStorageService, uuid2, enmlRenderer, scrollSyncor, apiClient) ->
     vm = this
 
     # ------------------------------------------------------------------------------------------------------------------
@@ -14,37 +14,67 @@ markever.controller 'EditorController',
     vm.note =
         guid: ""
         title: ""
-        markdown: ""
+        _markdown: ""
+
+    # markdown should only be get from this getter
+    vm.get_md = ->
+        return vm.note._markdown
+
+    vm.set_md = (md) ->
+        vm.note._markdown = md
+
+    vm.set_md_and_update_editor = (md) ->
+        vm.note._markdown = md
+        vm.ace_editor.setValue(md)
 
     # note lists containing only title and guid
     vm.all_notes = {}
 
     # ------------------------------------------------------------------------------------------------------------------
-    # ace editor
+    # Document ready
     # ------------------------------------------------------------------------------------------------------------------
-    vm.ace_editor = ''
-    vm.ace_editor_loaded = false
+    $document.ready ->
+        # load ace editor
+        $window.ace.config.set('basePath', '/javascripts/ace')
+        vm.ace_editor = $window.ace.edit("md_editor_div")
+        vm.ace_editor.renderer.setShowGutter(false)
+        vm.ace_editor.setShowPrintMargin(false)
+        vm.ace_editor.getSession().setMode("ace/mode/markdown")
+        vm.ace_editor.getSession().setUseWrapMode(true)
+        vm.ace_editor.setTheme('ace/theme/tomorrow_night_eighties')
+        vm.ace_editor.on 'change', vm.editor_content_changed
+        vm.ace_editor.focus()
 
-    $scope.aceLoaded = (editor) =>
         $html_div = $('#md_html_div')
-        vm.ace_editor = editor
-        if not vm.ace_editor_loaded
-            # sync scroll
-            scrollSyncor.syncScroll(editor, $html_div)
-            vm.ace_editor_loaded = true
-            # get note list
-            vm.refresh_all_notes()
-            # set ace base path
-            ace.config.set('basePath', '/javascripts/ace')
-            vm.ace_editor.setTheme('ace/theme/tomorrow_night_eighties')
-            # make effect settings
-            vm.set_keyboard_handler(vm.current_keyboard_handler)
-            vm.set_show_gutter(vm.current_show_gutter)
-            vm.set_ace_theme(vm.current_ace_theme)
-            # reset app status
-            vm.reset_status()
-            # set focus
-            editor.focus()
+        # sync scroll
+        scrollSyncor.syncScroll(vm.ace_editor, $html_div)
+
+        # get note list
+        vm.refresh_all_notes()
+
+        # take effect the settings
+        vm.set_keyboard_handler(vm.current_keyboard_handler)
+        vm.set_show_gutter(vm.current_show_gutter)
+        vm.set_ace_theme(vm.current_ace_theme)
+
+        # reset app status
+        vm.reset_status()
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # ace editor event handlers
+    # ------------------------------------------------------------------------------------------------------------------
+    vm.editor_content_changed = (event) ->
+        # set markdown (single direction updating)
+        vm.set_md(vm.ace_editor.getValue())
+        # TODO optimize performance
+        vm.render_html($('#md_html_div'))
+
+    # ------------------------------------------------------------------------------------------------------------------
+    # markdown render functions
+    # ------------------------------------------------------------------------------------------------------------------
+    vm.render_html = (jq_html_div) ->
+        jq_html_div.html($window.marked(vm.get_md()))
+        vm.html_post_process(jq_html_div)
 
     vm.html_post_process = (jq_html_div) ->
         # code highliting
@@ -61,19 +91,6 @@ markever.controller 'EditorController',
                 $img.attr('longdesc', uuid)
                 $img.attr('src', data_src)
 
-    vm.editor_content_changed = (event) ->
-        # TODO optimize performance
-        vm.html_post_process($('#md_html_div'))
-
-    $scope.aceChanged = vm.editor_content_changed
-
-    # ------------------------------------------------------------------------------------------------------------------
-    # markdown helper functions
-    # ------------------------------------------------------------------------------------------------------------------
-    vm.md2html = ->
-        vm.html = $window.marked(vm.note.markdown)
-        vm.htmlSafe = $sce.trustAsHtml(vm.html)
-
     # ------------------------------------------------------------------------------------------------------------------
     # Operations for notes
     # ------------------------------------------------------------------------------------------------------------------
@@ -88,22 +105,27 @@ markever.controller 'EditorController',
         if guid != vm.note.guid
             vm.open_loading_modal()
             apiClient.notes.note({id: guid})
-                .$promise.then (data) ->
-                    # TODO handle other status
-                    # extract markdown
-                    md = data.note.md
-                    # register resource data into ImageManager
-                    for r in data.note.resources
-                        vm.image_manager.add_image_data_mapping(r.uuid, r.data_url)
-                        console.log("register uuid: " + r.uuid + " data len: " + r.data_url.length)
-                    vm.note.markdown = md
-                    # render html
-                    vm.md2html()
-                    # set note info
-                    vm.note.guid = data.note.guid
-                    vm.note.title = data.note.title
-                    # close modal
-                    vm.close_loading_modal()
+                .$promise.then(
+                    (data) ->
+                        # TODO handle other status
+                        # extract markdown
+                        md = data.note.md
+                        # register resource data into ImageManager
+                        for r in data.note.resources
+                            vm.image_manager.add_image_data_mapping(r.uuid, r.data_url)
+                            console.log("register uuid: " + r.uuid + " data len: " + r.data_url.length)
+                        vm.set_md_and_update_editor(md)
+                        # render html
+                        vm.render_html($('#md_html_div'))
+                        # set note info
+                        vm.note.guid = data.note.guid
+                        vm.note.title = data.note.title
+                        # close modal
+                        vm.close_loading_modal()
+                    (error) ->
+                        alert('load note failed: ' + JSON.stringify(error))
+                        vm.close_loading_modal()
+                )
 
     # ------------------------------------------------------------------------------------------------------------------
     # App Status
@@ -316,8 +338,8 @@ markever.controller 'EditorController',
             html_div_hidden = $('#md_html_div_hidden')
             enml = enmlRenderer.getEnmlFromElement(
                 html_div_hidden,
-                vm.html_post_process,
-                vm.note.markdown,
+                vm.render_html,
+                vm.get_md(),
                 vm.image_manager
             )
             # set title to content of first H1, H2, H3, H4 tag
@@ -361,9 +383,10 @@ markever.controller 'EditorController',
 # Service: enmlRenderer
 # ----------------------------------------------------------------------------------------------------------------------
 angular.module('markever').factory 'enmlRenderer', ->
-    getEnmlFromElement = (jq_html_div, html_post_process_func, markdown, image_manager) ->
+    getEnmlFromElement = (jq_html_div, html_render_func, markdown, image_manager) ->
+        # init markdown render
         # html post process
-        html_post_process_func(jq_html_div)
+        html_render_func(jq_html_div)
 
         # further post process
         # remove all script tags
