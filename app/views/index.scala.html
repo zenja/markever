@@ -33,18 +33,17 @@
     <!-- Toolbar -->
     <div id="toolbar">
         <img id="toolbar_logo" src='@routes.Assets.at("/public/images", "logo.png")' alt="logo" />
-        <div class="btn-group">
-            <button class="btn btn-circle" ng-click='main.open_settings_modal()'>
-                <span class="glyphicon glyphicon-header" aria-hidden="true"></span>
-            </button>
-        </div>
-        <div class="btn-group">
-            <button class="btn btn-circle" ng-click="main.save_note()" ng-disabled="main.saving_note">
-                <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span>
-            </button>
-        </div>
+        <!-- H button -->
+        <button class="btn btn-toolbar" ng-click='main.open_settings_modal()'>
+            <span class="glyphicon glyphicon-header" aria-hidden="true"></span>
+        </button>
+        <!-- Save button -->
+        <button class="btn btn-toolbar" ng-click="main.save_note()" ng-disabled="main.saving_note">
+            <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span>
+        </button>
+        <!-- Notes button -->
         <div class="btn-group" dropdown>
-            <button class="btn btn-circle dropdown-toggle" dropdown-toggle ng-click="main.refresh_all_notes()">
+            <button class="btn btn-toolbar dropdown-toggle" dropdown-toggle ng-click="main.refresh_all_notes()">
                 <span class="glyphicon glyphicon-th-list" aria-hidden="true"></span>
             </button>
             <ul class="dropdown-menu" role="menu">
@@ -53,11 +52,10 @@
                 </li>
             </ul>
         </div>
-        <div class="btn-group">
-            <button class="btn btn-circle" ng-click="main.open_settings_modal()">
-                <span class="glyphicon glyphicon-cog" aria-hidden="true"></span>
-            </button>
-        </div>
+        <!-- Settings button -->
+        <button class="btn btn-toolbar" ng-click="main.open_settings_modal()">
+            <span class="glyphicon glyphicon-cog" aria-hidden="true"></span>
+        </button>
     </div>
 
     <!-- Editor and previewer area -->
