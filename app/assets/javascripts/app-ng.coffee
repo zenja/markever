@@ -273,13 +273,22 @@ markever.controller 'EditorController',
         # show modal
         $('#settings-modal').modal({})
         # explicit return non-DOM result to avoid warning
-        return false
+        return true
 
     vm.save_settings = ->
         vm.set_ace_theme(vm.new_ace_theme)
         vm.set_keyboard_handler(vm.new_keyboard_handler)
         vm.set_show_gutter(vm.new_show_gutter)
 
+    # ------------------------------------------------------------------------------------------------------------------
+    # note list modal
+    # ------------------------------------------------------------------------------------------------------------------
+    vm.open_note_list_modal = ->
+        # clear search keyword
+        vm.search_note_keyword = ''
+        $('#note_list_div').modal({})
+        # explicit return non-DOM result to avoid warning
+        return true
     # ------------------------------------------------------------------------------------------------------------------
     # toolbar
     # ------------------------------------------------------------------------------------------------------------------

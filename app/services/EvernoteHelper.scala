@@ -48,7 +48,7 @@ class EvernoteHelper(val token: String) {
     noteFilter.setWords(query)
     noteFilter.setOrder(NoteSortOrder.UPDATED.getValue())
     noteFilter.setAscending(false)
-    // TODO use findNotesMetadata() instead to get only needed metadata
+    // TODO use findNotesMetadata() instead to get only needed metadata, findNote() is deprecated
     val noteList : NoteList = noteStore.findNotes(noteFilter, offset, maxNotes)
     // Note objects returned by findNotes() only contain note attributes
     // such as title, GUID, creation date, update date, etc. The note content
@@ -75,7 +75,8 @@ class EvernoteHelper(val token: String) {
     */
   def allNotes(retrieveContent: Boolean = false, retrieveResources: Boolean = false): List[Note] = {
     val query = "sourceApplication:" + MarkeverConf.application_identifier
-    searchNotes(query, 0, 15)
+    // TODO how to set the max #notes returned
+    searchNotes(query, 0, 100)
   }
 
   def getNote(guid: String, retrieveContent: Boolean = true, retrieveResources: Boolean = true): Option[Note] = {
