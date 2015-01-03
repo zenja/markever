@@ -123,7 +123,7 @@
             <div id="note_list_ul_div">
                 <ul>
                     <li ng-repeat="note in main.all_notes | filter:main.search_note_keyword">
-                        <a href ng-click="main.load_note(note.guid)">{{note.title}}</a>
+                        <a href data-dismiss="modal" ng-click="main.load_note(note.guid)">{{note.title}}</a>
                     </li>
                 </ul>
             </div>
