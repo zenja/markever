@@ -105,9 +105,9 @@ markever.controller 'EditorController',
   # ------------------------------------------------------------------------------------------------------------------
   # TODO prevent multipal duplicated requests
   vm.refresh_all_notes = ->
-    apiClient.notes.all (data) ->
-      # TODO handle failure
-      vm.all_notes = data['notes']
+    # TODO handle failure
+    noteManager.load_remote_notes().then (data) ->
+        vm.all_notes = data['notes']
 
   vm.load_note = (guid) ->
     # check if the note to be loaded is already current note
@@ -541,7 +541,7 @@ markever.factory 'imageManager', ['uuid2', (uuid2) -> new class ImageManager
 # ----------------------------------------------------------------------------------------------------------------------
 # Service: noteManager
 # ----------------------------------------------------------------------------------------------------------------------
-markever.factory 'noteManager', ['apiClient', (apiClient) -> new class NoteManager
+markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageManager) -> new class NoteManager
 
   # Status of a note:
   # 1. new: note with a generated guid, not attached to remote
@@ -599,13 +599,15 @@ markever.factory 'noteManager', ['apiClient', (apiClient) -> new class NoteManag
 
   # ------------------------------------------------------------
   # Load remote note list to update local notes info
+  # return: promise
   # ------------------------------------------------------------
-  load_remote_notes: (on_success, on_error) =>
+  load_remote_notes: =>
     # fetch remote notes
-    apiClient.notes.all (data)
-      # TODO handle failure
+    # TODO handle failure
+    return apiClient.notes.all()
       .$promise.then (data) =>
-        @_merge_remote_notes(data['notes'])
+        #@_merge_remote_notes(data['notes'])
+        return data
 
   # ------------------------------------------------------------
   # merge remote note list into local note list
@@ -615,7 +617,8 @@ markever.factory 'noteManager', ['apiClient', (apiClient) -> new class NoteManag
       guid = note_meta['guid']
       title = note_meta['title']
       @find_note_by_guid(guid).then (local_note) =>
-        if note.length == 0
+        # TODO check is note not found, what will var note be
+        if local_note.length == 0
           @update_note({
             guid: guid
             title: title
