@@ -106,8 +106,8 @@ markever.controller 'EditorController',
   # TODO prevent multipal duplicated requests
   vm.refresh_all_notes = ->
     # TODO handle failure
-    noteManager.load_remote_notes().then (data) ->
-        vm.all_notes = data['notes']
+    noteManager.load_remote_notes().then (notes) ->
+        vm.all_notes = notes
 
   vm.load_note = (guid) ->
     # check if the note to be loaded is already current note
@@ -352,11 +352,9 @@ markever.controller 'EditorController',
             alert('create note failed: \n' + JSON.stringify(error))
             console.log(JSON.stringify(error))
         )
-  vm.debug_note_manager = () ->
-    nm = noteManager
-    alert(Object.keys(nm))
-    nm.try_db()
 
+  # fixme for debug
+  vm.note_manager = noteManager
 ]
 
 
@@ -561,7 +559,7 @@ markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageM
   # synced_meta ------
 
   constructor: ->
-    @db_promise = @init_db()
+    @init_db()
 
   NOTE_STATUS:
     NEW: 0
@@ -585,17 +583,9 @@ markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageM
         }
       }
     }
-    return db.open(db_open_option)
-
-  try_db: () =>
-    @db_promise = @db_promise || @init_db()
-    @db_promise.then (server) ->
-      server.notes.add {
-        guid: '1234-5678-9101-1121'
-        title: 'born!'
-        status: @NOTE_STATUS.MODIFIED
-        md: 'hi\n=='
-      }
+    db.open(db_open_option).then (server) =>
+      @db_server = server
+      console.log('DB initiated.')
 
   # ------------------------------------------------------------
   # Load remote note list to update local notes info
@@ -606,61 +596,114 @@ markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageM
     # TODO handle failure
     return apiClient.notes.all()
       .$promise.then (data) =>
-        #@_merge_remote_notes(data['notes'])
-        return data
+        @_merge_remote_notes(data['notes'])
+        # FIXME need to use promise
+        return @get_all_notes()
 
   # ------------------------------------------------------------
-  # merge remote note list into local note list
+  # merge remote note list into local note list db
+  # Possible situations: TODO
   # ------------------------------------------------------------
   _merge_remote_notes: (notes) =>
+    # Phase one: patch remote notes to local
+    remote_note_guid_list = []
     for note_meta in notes
-      guid = note_meta['guid']
-      title = note_meta['title']
-      @find_note_by_guid(guid).then (local_note) =>
-        # TODO check is note not found, what will var note be
-        if local_note.length == 0
-          @update_note({
-            guid: guid
-            title: title
-          })
-        else
-          switch local_note.status
-            when @NOTE_STATUS.NEW
-              console.log('[IMPOSSIBLE] remote note\'s local cache is in status NEW')
-            when @NOTE_STATUS.SYNCED_META
-              # update note title
-              @update_note({
-                guid: guid
-                title: title
-              })
-            when @NOTE_STATUS.SYNCED_ALL
-              # fetch the whole note from server and update local
-              @fetch_remote_note(guid).then (data) =>
-                note =
-                  guid: data.note.guid
-                  title: data.note.title
-                  md: data.note.md
-                @update_note(note)
-                # TODO @update_image_manager
-            when @NOTE_STATUS.MODIFIED
-              # do nothing
-              console.log('do nothing')
+      remote_note_guid_list.push(note_meta['guid'])
+      do (note_meta) =>
+        guid = note_meta['guid']
+        title = note_meta['title']
+        console.log('Merging note [' + guid + ']')
+
+        @find_note_by_guid(guid).then (local_note) =>
+          if local_note.length == 0
+            console.log('About to add note ' + guid)
+            @add_note_meta({
+              guid: guid
+              title: title
+            })
+          else
+            switch local_note.status
+              when @NOTE_STATUS.NEW
+                console.log('[IMPOSSIBLE] remote note\'s local cache is in status NEW')
+              when @NOTE_STATUS.SYNCED_META
+                # update note title
+                @update_note({
+                  guid: guid
+                  title: title
+                })
+              when @NOTE_STATUS.SYNCED_ALL
+                # fetch the whole note from server and update local
+                @fetch_remote_note(guid).then (data) =>
+                  note =
+                    guid: data.note.guid
+                    title: data.note.title
+                    md: data.note.md
+                  @update_note(note)
+                  # TODO @update_image_manager
+              when @NOTE_STATUS.MODIFIED
+                # do nothing
+                console.log('do nothing')
+    # Phase two: deleted local notes not needed
+    # Notes that should be deleted:
+    # not in remote and status is not new/modified
+    @get_all_notes().then (notes) =>
+      for n in notes
+        if (n.guid not in remote_note_guid_list) && n.status != @NOTE_STATUS.NEW && n.status != @NOTE_STATUS.MODIFIED
+          @delete_note(n.guid)
+          console.log('local note ' + n.guid + ' deleted.')
 
   # --------------------------------- DB operations ---------------------------------
+  get_all_notes: () =>
+    return @db_server.notes.query().all().execute()
+
+  delete_note: (guid) =>
+    @find_note_by_guid(guid).then (notes) =>
+      for note in notes
+        do (note) =>
+          @db_server.notes.remove(note.id)
+
+  # fixme for debug
+  add_fake_note: () =>
+    @db_server.notes.add({
+      guid: '9999-9999-9999-9999'
+      title: 'fake title'
+      status: @NOTE_STATUS.SYNCED_META
+    }).then () ->
+      alert('fake note added to db')
 
   # ------------------------------------------------------------
   # return a copy of a note in db with a given guid
   # return: promise containing note's info
   # ------------------------------------------------------------
   find_note_by_guid: (guid) ->
-    @db_promise = @db_promise || @init_db()
-    return @db_promise.notes.query('guid', guid).execute()
+    return @db_server.notes.query().filter('guid', guid).execute()
 
-  # update a note's all info
+  # ------------------------------------------------------------
+  # add a remote note's metadata which is not in local db to db
+  #
   # return: promise
+  # ------------------------------------------------------------
+  add_note_meta: (note) ->
+    console.log('Adding note to db - guid: ' + note.guid + ' title: ' + note.title)
+    @db_server.notes.add({
+      guid: note.guid
+      title: note.title
+      status: @NOTE_STATUS.SYNCED_META
+    })
+
+  # ------------------------------------------------------------
+  # update a note
+  # return: promise
+  # ------------------------------------------------------------
   update_note: (note) ->
-    @db_promise = @db_promise || @init_db()
-    return @db_promise.notes.query('guid', guid).modify(note).execute()
+    return @db_server.notes.query('guid').only(note['guid']).modify(note).execute()
+
+  # ------------------------------------------------------------
+  # clear db
+  # return: promise
+  # ------------------------------------------------------------
+  clear_all_notes: () ->
+    return @db_server.notes.clear()
 
   # ------------------------------- remote operations -------------------------------
 
@@ -672,21 +715,5 @@ markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageM
     return apiClient.notes.note({id: guid}).$promise
 
   # --------------------------------- tmp operations --------------------------------
-  # Load unsynced notes from local storage
-  load_unsynced_notes: () =>
-    # fetch unsynced notes
-    # merge unsynced notes
-
-  _merge_unsynced_notes: (unsynced_notes) =>
-
-  # Sync local changes to remote
-  sync_to_remote: (on_success, on_error) =>
-    notes = @get_unsynced_notes()
-#      for guid, note of notes
-#        if note.status == @STATUS.NEW
-#        if note.status == @STATUS.MODIFIED
-
-  # return a copy of notes whose status is new or modified, to be saved in local storage
-  get_unsynced_notes: () =>
 ]
 
