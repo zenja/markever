@@ -3,8 +3,10 @@
 markever = angular.module('markever', ['ngResource', 'ui.bootstrap', 'LocalStorageModule', 'angularUUID2'])
 
 markever.controller 'EditorController',
-['$scope', '$window', '$document', '$http', '$sce', 'localStorageService', 'uuid2', 'enmlRenderer', 'scrollSyncor', 'apiClient',
-($scope, $window, $document, $http, $sce, localStorageService, uuid2, enmlRenderer, scrollSyncor, apiClient) ->
+['$scope', '$window', '$document', '$http', '$sce',
+ 'localStorageService', 'enmlRenderer', 'scrollSyncor', 'apiClient', 'noteManager', 'imageManager',
+($scope, $window, $document, $http, $sce,
+ localStorageService, enmlRenderer, scrollSyncor, apiClient, noteManager, imageManager) ->
   vm = this
 
   # ------------------------------------------------------------------------------------------------------------------
@@ -93,7 +95,7 @@ markever.controller 'EditorController',
     jq_html_div.find('img[src]').each (index) ->
       $img = $(this)
       uuid = $img.attr('src')
-      data_src = vm.image_manager.get_image_data_from_uuid(uuid)
+      data_src = imageManager.get_image_data_from_uuid(uuid)
       if data_src
         $img.attr('longdesc', uuid)
         $img.attr('src', data_src)
@@ -119,7 +121,7 @@ markever.controller 'EditorController',
             md = data.note.md
             # register resource data into ImageManager
             for r in data.note.resources
-              vm.image_manager.add_image_data_mapping(r.uuid, r.data_url)
+              imageManager.add_image_data_mapping(r.uuid, r.data_url)
               console.log("register uuid: " + r.uuid + " data len: " + r.data_url.length)
             vm.set_md_and_update_editor(md)
             # render html
@@ -257,39 +259,8 @@ markever.controller 'EditorController',
     console.log(JSON.stringify(items))
     if items[0].type.match(/image.*/)
       blob = items[0].getAsFile()
-      image_info = vm.image_manager.load_image_blob(blob)
+      image_info = imageManager.load_image_blob(blob)
       vm.ace_editor.insert('![Alt text](' + image_info.uuid + ')')
-
-  # ------------------------------------------------------------------------------------------------------------------
-  # image handler
-  # ------------------------------------------------------------------------------------------------------------------
-  class ImageManager
-    _image_data_map: {}
-
-    get_image_data_from_uuid: (uuid) =>
-      return @_image_data_map[uuid]
-
-    # param data is base64 data url
-    add_image_data_mapping: (uuid, data) =>
-      @_image_data_map[uuid] = data
-
-    load_image_blob: (blob, extra_handler) =>
-      uuid = uuid2.newuuid()
-      reader = new FileReader()
-      reader.onload = (event) =>
-        console.log("image result: " + event.target.result)
-        @add_image_data_mapping(uuid, event.target.result)
-        # optional extra_handler
-        if extra_handler
-          extra_handler(event)
-      # start reading blob data, and get result in base64 data URL
-      reader.readAsDataURL(blob)
-      return {
-        uuid: uuid
-        data: @get_image_data_from_uuid(uuid)
-      }
-
-  vm.image_manager = new ImageManager
 
   # ------------------------------------------------------------------------------------------------------------------
   # settings modal
@@ -346,8 +317,7 @@ markever.controller 'EditorController',
       enml = enmlRenderer.getEnmlFromElement(
         html_div_hidden,
         vm.render_html,
-        vm.get_md(),
-        vm.image_manager
+        vm.get_md()
       )
       # set title to content of first H1, H2, H3, H4 tag
       vm.note.title = 'New Note - Markever'
@@ -382,6 +352,10 @@ markever.controller 'EditorController',
             alert('create note failed: \n' + JSON.stringify(error))
             console.log(JSON.stringify(error))
         )
+  vm.debug_note_manager = () ->
+    nm = noteManager
+    alert(Object.keys(nm))
+    nm.try_db()
 
 ]
 
@@ -389,8 +363,8 @@ markever.controller 'EditorController',
 # ----------------------------------------------------------------------------------------------------------------------
 # Service: enmlRenderer
 # ----------------------------------------------------------------------------------------------------------------------
-angular.module('markever').factory 'enmlRenderer', ->
-  getEnmlFromElement = (jq_html_div, html_render_func, markdown, image_manager) ->
+markever.factory 'enmlRenderer', ['imageManager', (imageManager) ->
+  getEnmlFromElement = (jq_html_div, html_render_func, markdown) ->
     # init markdown render
     # html post process
     html_render_func(jq_html_div)
@@ -476,6 +450,7 @@ angular.module('markever').factory 'enmlRenderer', ->
   return {
     getEnmlFromElement : getEnmlFromElement
   }
+]
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -531,5 +506,184 @@ markever.factory 'apiClient', ['$resource', ($resource) ->
   return {
     notes : Notes
   }
+]
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Service: imageManager
+# ----------------------------------------------------------------------------------------------------------------------
+markever.factory 'imageManager', ['uuid2', (uuid2) -> new class ImageManager
+  _image_data_map: {}
+
+  get_image_data_from_uuid: (uuid) =>
+    return @_image_data_map[uuid]
+
+  # param data is base64 data url
+  add_image_data_mapping: (uuid, data) =>
+    @_image_data_map[uuid] = data
+
+  load_image_blob: (blob, extra_handler) =>
+    uuid = uuid2.newuuid()
+    reader = new FileReader()
+    reader.onload = (event) =>
+      console.log("image result: " + event.target.result)
+      @add_image_data_mapping(uuid, event.target.result)
+      # optional extra_handler
+      if extra_handler
+        extra_handler(event)
+    # start reading blob data, and get result in base64 data URL
+    reader.readAsDataURL(blob)
+    return {
+      uuid: uuid
+      data: @get_image_data_from_uuid(uuid)
+    }
+]
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Service: noteManager
+# ----------------------------------------------------------------------------------------------------------------------
+markever.factory 'noteManager', ['apiClient', (apiClient) -> new class NoteManager
+
+  # Status of a note:
+  # 1. new: note with a generated guid, not attached to remote
+  # 2. synced_meta: note with metadata fetched to remote. not editable
+  # 3. synced_all: note with all data synced with remote. editable
+  # 4. modified: note attached to remote, but has un-synced modification
+  #
+  # Status transition:
+  #
+  #    sync        modify
+  # new ------> synced_all ---------> modified
+  #                  ^     <---------
+  #                  |        sync
+  #                  |
+  #                  | load note data from remote
+  #                  |
+  # synced_meta ------
+
+  constructor: ->
+    @db_promise = @init_db()
+
+  NOTE_STATUS:
+    NEW: 0
+    SYNCED_META: 1
+    SYNCED_ALL: 2
+    MODIFIED: 3
+
+  init_db: () =>
+    db_open_option = {
+      server: 'markever'
+      version: 1
+      schema: {
+        notes: {
+          key: { keyPath: 'id' , autoIncrement: true },
+          indexes: {
+            guid: {}
+            title: {}
+            status: {}
+            md: {}
+          }
+        }
+      }
+    }
+    return db.open(db_open_option)
+
+  try_db: () =>
+    @db_promise = @db_promise || @init_db()
+    @db_promise.then (server) ->
+      server.notes.add {
+        guid: '1234-5678-9101-1121'
+        title: 'born!'
+        status: @NOTE_STATUS.MODIFIED
+        md: 'hi\n=='
+      }
+
+  # ------------------------------------------------------------
+  # Load remote note list to update local notes info
+  # ------------------------------------------------------------
+  load_remote_notes: (on_success, on_error) =>
+    # fetch remote notes
+    apiClient.notes.all (data)
+      # TODO handle failure
+      .$promise.then (data) =>
+        @_merge_remote_notes(data['notes'])
+
+  # ------------------------------------------------------------
+  # merge remote note list into local note list
+  # ------------------------------------------------------------
+  _merge_remote_notes: (notes) =>
+    for note_meta in notes
+      guid = note_meta['guid']
+      title = note_meta['title']
+      @find_note_by_guid(guid).then (local_note) =>
+        if note.length == 0
+          @update_note({
+            guid: guid
+            title: title
+          })
+        else
+          switch local_note.status
+            when @NOTE_STATUS.NEW
+              console.log('[IMPOSSIBLE] remote note\'s local cache is in status NEW')
+            when @NOTE_STATUS.SYNCED_META
+              # update note title
+              @update_note({
+                guid: guid
+                title: title
+              })
+            when @NOTE_STATUS.SYNCED_ALL
+              # fetch the whole note from server and update local
+              @fetch_remote_note(guid).then (data) =>
+                note =
+                  guid: data.note.guid
+                  title: data.note.title
+                  md: data.note.md
+                @update_note(note)
+                # TODO @update_image_manager
+            when @NOTE_STATUS.MODIFIED
+              # do nothing
+              console.log('do nothing')
+
+  # --------------------------------- DB operations ---------------------------------
+
+  # ------------------------------------------------------------
+  # return a copy of a note in db with a given guid
+  # return: promise containing note's info
+  # ------------------------------------------------------------
+  find_note_by_guid: (guid) ->
+    @db_promise = @db_promise || @init_db()
+    return @db_promise.notes.query('guid', guid).execute()
+
+  # update a note's all info
+  # return: promise
+  update_note: (note) ->
+    @db_promise = @db_promise || @init_db()
+    return @db_promise.notes.query('guid', guid).modify(note).execute()
+
+  # ------------------------------- remote operations -------------------------------
+
+  # ------------------------------------------------------------
+  # fetch a remote note's all info by guid
+  # return: promise containing note's info
+  # ------------------------------------------------------------
+  fetch_remote_note: (guid) ->
+    return apiClient.notes.note({id: guid}).$promise
+
+  # --------------------------------- tmp operations --------------------------------
+  # Load unsynced notes from local storage
+  load_unsynced_notes: () =>
+    # fetch unsynced notes
+    # merge unsynced notes
+
+  _merge_unsynced_notes: (unsynced_notes) =>
+
+  # Sync local changes to remote
+  sync_to_remote: (on_success, on_error) =>
+    notes = @get_unsynced_notes()
+#      for guid, note of notes
+#        if note.status == @STATUS.NEW
+#        if note.status == @STATUS.MODIFIED
+
+  # return a copy of notes whose status is new or modified, to be saved in local storage
+  get_unsynced_notes: () =>
 ]
 

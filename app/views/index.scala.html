@@ -52,7 +52,7 @@
     <div id="toolbar">
         <img id="toolbar_logo" src='@routes.Assets.at("/public/images", "logo.png")' alt="logo" />
         <!-- H button -->
-        <button class="btn btn-toolbar" ng-click='main.open_settings_modal()'>
+        <button class="btn btn-toolbar" ng-click='main.debug_note_manager()'>
             <span class="glyphicon glyphicon-header" aria-hidden="true"></span>
         </button>
         <!-- Save button -->
@@ -155,6 +155,7 @@
     <script src='@routes.Assets.at("/public/javascripts", "angular-local-storage.min.js")' type="text/javascript"></script>
     <script src='@routes.Assets.at("/public/javascripts", "ui-bootstrap-tpls-0.12.0.min.js")' type="text/javascript"></script>
     <script src='@routes.Assets.at("/public/javascripts", "angular-uuid2.min.js")' type="text/javascript"></script>
+    <script src='@routes.Assets.at("/public/javascripts", "db.js")' type="text/javascript"></script>
     <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     <script type="text/x-mathjax-config">
         MathJax.Hub.Config({
