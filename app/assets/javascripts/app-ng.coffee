@@ -127,7 +127,7 @@ markever.controller 'EditorController',
           # close modal
           vm.close_loading_modal()
         (error) ->
-          alert('load note failed: ' + JSON.stringify(error))
+          alert('load note ' + guid + ' failed: ' + JSON.stringify(error))
           vm.close_loading_modal()
       )
 
@@ -591,15 +591,23 @@ markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageM
   # return: promise containing note's info
   # ------------------------------------------------------------
   fetch_remote_note: (guid) =>
-    return apiClient.notes.note({id: guid}).$promise.then (data) =>
-      note =
-        guid: guid
-        title: data.note.title
-        md: data.note.md
-        status: @NOTE_STATUS.SYNCED_ALL
-        resources: data.note.resources
-      @update_note(note)
-      return note
+    console.log('fetch_remote_note(' + guid + ') begins to invoke')
+    return @find_note_by_guid(guid).then (note) =>
+      console.log('fetch_remote_note(' + guid + ') local note: ' + JSON.stringify(note))
+      if note != null && note.status == @NOTE_STATUS.SYNCED_ALL
+        console.log('Local note fetch hit: ' + JSON.stringify(note))
+        return note
+      else
+        console.log('Local note fetch missed, fetch from remote: ' + guid)
+        return apiClient.notes.note({id: guid}).$promise.then (data) =>
+          _note =
+            guid: guid
+            title: data.note.title
+            md: data.note.md
+            status: @NOTE_STATUS.SYNCED_ALL
+            resources: data.note.resources
+          @update_note(_note)
+          return _note
 
   # ------------------------------------------------------------
   # Load remote note list to update local notes info
@@ -630,14 +638,15 @@ markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageM
         title = note_meta['title']
         console.log('Merging note [' + guid + ']')
 
-        @find_note_by_guid(guid).then (local_note) =>
-          if local_note.length == 0
+        @find_note_by_guid(guid).then (note) =>
+          if note == null
             console.log('About to add note ' + guid)
             @add_note_meta({
               guid: guid
               title: title
             })
           else
+            console.log('local note ' + guid + ' exists, updating from remote.')
             switch local_note.status
               when @NOTE_STATUS.NEW
                 console.log('[IMPOSSIBLE] remote note\'s local cache is in status NEW')
@@ -649,13 +658,17 @@ markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageM
                 })
               when @NOTE_STATUS.SYNCED_ALL
                 # fetch the whole note from server and update local
-                @fetch_remote_note(guid).then (data) =>
-                  note =
-                    guid: data.note.guid
-                    title: data.note.title
-                    md: data.note.md
-                  @update_note(note)
-                  # TODO @update_image_manager
+                @fetch_remote_note(guid).then(
+                  (data) =>
+                    note =
+                      guid: data.note.guid
+                      title: data.note.title
+                      md: data.note.md
+                    @update_note(note)
+                    # TODO @update_image_manager
+                  (error) =>
+                    alert('fetch note ' + guid + ' failed during _merge_remote_notess():' + JSON.stringify(error))
+                )
               when @NOTE_STATUS.MODIFIED
                 # do nothing
                 console.log('do nothing')
@@ -666,18 +679,27 @@ markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageM
       for n in notes
         if (n.guid not in remote_note_guid_list) && n.status != @NOTE_STATUS.NEW && n.status != @NOTE_STATUS.MODIFIED
           @delete_note(n.guid)
-          console.log('local note ' + n.guid + ' deleted.')
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| DB Operations >
 
   get_all_notes: () =>
-    return @db_server.notes.query().all().execute()
+    return new Promise (resolve, reject) =>
+      resolve(@db_server.notes.query().all().execute())
 
   delete_note: (guid) =>
-    @find_note_by_guid(guid).then (notes) =>
-      for note in notes
-        do (note) =>
+    console.log('delete_note(' + guid + ') invoked')
+    @find_note_by_guid(guid).then(
+      (note) =>
+        alert('!!')
+        if note is null
+          console.log('cannot delete note null, aborted')
+        else
+          console.log('about to remove note id ' + note.id)
           @db_server.notes.remove(note.id)
+          console.log('local note ' + note.guid + ' deleted. id: ' + note.id)
+      ,(error) =>
+        alert('error!')
+    )
 
   # fixme for debug
   add_fake_note: () =>
@@ -690,10 +712,21 @@ markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageM
 
   # ------------------------------------------------------------
   # Return a copy of a note in db with a given guid
-  # return: promise containing note's info
+  # return: promise containing the note's info,
+  #         or null if note does not exist
   # ------------------------------------------------------------
-  find_note_by_guid: (guid) ->
-    return @db_server.notes.query().filter('guid', guid).execute()
+  find_note_by_guid: (guid) =>
+    # db.js then() does not return a Promise,
+    # need to be wrapper in a real Promise
+    p = new Promise (resolve, reject) =>
+      resolve(@db_server.notes.query().filter('guid', guid).execute())
+    return p.then (notes) =>
+      if notes.length == 0
+        console.log('find_note_by_guid(' + guid + ') returned null')
+        return null
+      else
+        console.log('find_note_by_guid(' + guid + ') hit: ' + JSON.stringify(notes[0]))
+        return notes[0]
 
   # ------------------------------------------------------------
   # Add a remote note's metadata which is not in local db to db
@@ -702,31 +735,37 @@ markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageM
   # ------------------------------------------------------------
   add_note_meta: (note) ->
     console.log('Adding note to db - guid: ' + note.guid + ' title: ' + note.title)
-    @db_server.notes.add({
-      guid: note.guid
-      title: note.title
-      status: @NOTE_STATUS.SYNCED_META
-    })
+    return new Promise (resolve, reject) =>
+      resolve(
+        @db_server.notes.add({
+          guid: note.guid
+          title: note.title
+          status: @NOTE_STATUS.SYNCED_META
+        })
+      )
 
   # ------------------------------------------------------------
   # Update a note
   # return: promise
   # ------------------------------------------------------------
   update_note: (note) ->
+    console.log('update_note(' + note.guid + ')')
     # register resource data into ImageManager
     if note.resources
       for r in note.resources
         imageManager.add_image_data_mapping(r.uuid, r.data_url)
         console.log("register uuid: " + r.uuid + " data len: " + r.data_url.length)
     # update notes db
-    return @db_server.notes.query('guid').only(note['guid']).modify(note).execute()
+    return new Promise (resolve, reject) =>
+      resolve(@db_server.notes.query('guid').only(note['guid']).modify(note).execute())
 
   # ------------------------------------------------------------
   # Clear db
   # return: promise
   # ------------------------------------------------------------
   clear_all_notes: () ->
-    return @db_server.notes.clear()
+    return new Promise (resolve, reject) =>
+      resolve(@db_server.notes.clear())
 
   # --------------------------------- tmp operations --------------------------------
 ]
