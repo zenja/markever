@@ -72,9 +72,9 @@
     <!-- Editor and previewer area -->
     <div id="md_div" ng-paste='main.handle_paste($event)'>
         <div id="md_editor_div"></div>
-        <div id="md_html_div" ng-bind-html="main.htmlSafe"></div>
+        <div id="md_html_div"></div>
     </div>
-    <div id="md_html_div_hidden" ng-bind-html="main.htmlSafe" style="visibility:hidden;height:1px;overflow:hidden;z-index:0;"></div>
+    <div id="md_html_div_hidden" style="visibility:hidden;height:1px;overflow:hidden;z-index:0;"></div>
 
     <!-- Loading Indicator Modal -->
     <div class="modal fade" id="loading-modal" tabindex="-1" role="dialog" aria-labelledby="settings-modal" aria-hidden="true">
