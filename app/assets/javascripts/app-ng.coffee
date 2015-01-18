@@ -103,10 +103,11 @@ markever.controller 'EditorController',
   # ------------------------------------------------------------------------------------------------------------------
   # Operations for notes
   # ------------------------------------------------------------------------------------------------------------------
-  # TODO prevent multipal duplicated requests
+  # TODO prevent multiple duplicated requests
   vm.refresh_all_notes = ->
     # TODO handle failure
     noteManager.load_remote_notes().then (notes) ->
+        console.log('load_remote_notes() result: ' + JSON.stringify(notes))
         vm.all_notes = notes
 
   vm.load_note = (guid) ->
@@ -502,6 +503,35 @@ markever.factory 'apiClient', ['$resource', ($resource) ->
 ]
 
 # ----------------------------------------------------------------------------------------------------------------------
+# Service: dbProvider
+# ----------------------------------------------------------------------------------------------------------------------
+markever.factory 'dbProvider', -> new class DBProvider
+  constructor: ->
+    @db_server_promise = @init_db()
+
+  init_db: () =>
+    db_open_option = {
+      server: 'markever'
+      version: 1
+      schema: {
+        notes: {
+          key: { keyPath: 'id' , autoIncrement: true },
+          indexes: {
+            guid: {}
+            title: {}
+            status: {}
+            md: {}
+          }
+        }
+      }
+    }
+    return db.open(db_open_option)
+
+  get_db_server_promise: () =>
+    console.log('return @db_server_promise')
+    return @db_server_promise
+
+# ----------------------------------------------------------------------------------------------------------------------
 # Service: imageManager
 # ----------------------------------------------------------------------------------------------------------------------
 markever.factory 'imageManager', ['uuid2', (uuid2) -> new class ImageManager
@@ -534,7 +564,9 @@ markever.factory 'imageManager', ['uuid2', (uuid2) -> new class ImageManager
 # ----------------------------------------------------------------------------------------------------------------------
 # Service: noteManager
 # ----------------------------------------------------------------------------------------------------------------------
-markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageManager) -> new class NoteManager
+markever.factory 'noteManager',
+['dbProvider', 'apiClient', 'imageManager',
+(dbProvider, apiClient, imageManager) -> new class NoteManager
 
   # Status of a note:
   # 1. new: note with a generated guid, not attached to remote
@@ -554,33 +586,15 @@ markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageM
   # synced_meta ------
 
   constructor: ->
-    @init_db()
+    dbProvider.get_db_server_promise().then (server) =>
+      @db_server = server
+      console.log('DB initialized')
 
   NOTE_STATUS:
     NEW: 0
     SYNCED_META: 1
     SYNCED_ALL: 2
     MODIFIED: 3
-
-  init_db: () =>
-    db_open_option = {
-      server: 'markever'
-      version: 1
-      schema: {
-        notes: {
-          key: { keyPath: 'id' , autoIncrement: true },
-          indexes: {
-            guid: {}
-            title: {}
-            status: {}
-            md: {}
-          }
-        }
-      }
-    }
-    db.open(db_open_option).then (server) =>
-      @db_server = server
-      console.log('DB initiated.')
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Remote Operations >
 
@@ -614,13 +628,16 @@ markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageM
   # return: promise
   # ------------------------------------------------------------
   load_remote_notes: =>
-    # fetch remote notes
     # TODO handle failure
-    return apiClient.notes.all()
-      .$promise.then (data) =>
-        @_merge_remote_notes(data['notes'])
-        # FIXME need to use promise
-        return @get_all_notes()
+    return apiClient.notes.all().$promise.then (data) =>
+      @_merge_remote_notes(data['notes']).then(
+        () =>
+          console.log('finish merging remote notes')
+          return @get_all_notes()
+        (error) =>
+          # TODO pass error on
+          alert('_merge_remote_notes() failed!')
+      )
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Merge/Sync Operations >
 
@@ -629,8 +646,13 @@ markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageM
   # Possible situations: TODO
   # ------------------------------------------------------------
   _merge_remote_notes: (notes) =>
-    # Phase one: patch remote notes to local
+    guid_list = (note['guid'] for note in notes)
+    console.log('start merging remote notes: ' + JSON.stringify(guid_list))
+
+    must_finish_promise_list = []
     remote_note_guid_list = []
+
+    # Phase one: patch remote notes to local
     for note_meta in notes
       remote_note_guid_list.push(note_meta['guid'])
       do (note_meta) =>
@@ -638,57 +660,90 @@ markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageM
         title = note_meta['title']
         console.log('Merging note [' + guid + ']')
 
-        @find_note_by_guid(guid).then (note) =>
+        find_p = @find_note_by_guid(guid).then (note) =>
+          _find_p_must_finish_promise_list = []
           if note == null
             console.log('About to add note ' + guid)
-            @add_note_meta({
+            p = @add_note_meta({
               guid: guid
               title: title
-            })
+            }).then () => console.log('note ' + guid + ' metadata added!')
+            _find_p_must_finish_promise_list.push(p)
+            console.log('pushed to _find_p_must_finish_promise_list. TAG: A')
+
           else
             console.log('local note ' + guid + ' exists, updating from remote.')
-            switch local_note.status
+            switch note.status
               when @NOTE_STATUS.NEW
                 console.log('[IMPOSSIBLE] remote note\'s local cache is in status NEW')
+
               when @NOTE_STATUS.SYNCED_META
                 # update note title
-                @update_note({
+                p = @update_note({
                   guid: guid
                   title: title
                 })
+                _find_p_must_finish_promise_list.push(p)
+                console.log('pushed to _find_p_must_finish_promise_list. TAG: B')
+
               when @NOTE_STATUS.SYNCED_ALL
                 # fetch the whole note from server and update local
+                console.log('local note ' + guid + ' is SYNCED_ALL, about to fetch from remote for updating')
                 @fetch_remote_note(guid).then(
                   (data) =>
                     note =
                       guid: data.note.guid
                       title: data.note.title
                       md: data.note.md
-                    @update_note(note)
-                    # TODO @update_image_manager
+                    p = @update_note(note)
+                    # maybe FIXME did not add to promise waiting list
+                    #_find_p_must_finish_promise_list.push(p)
+                    #console.log('pushed to _find_p_must_finish_promise_list. TAG: C')
                   (error) =>
-                    alert('fetch note ' + guid + ' failed during _merge_remote_notess():' + JSON.stringify(error))
+                    alert('fetch note ' + guid + ' failed during _merge_remote_notes():' + JSON.stringify(error))
                 )
+
               when @NOTE_STATUS.MODIFIED
                 # do nothing
                 console.log('do nothing')
+
+              else
+                alert('IMPOSSIBLE: no correct note status')
+          return Promise.all(_find_p_must_finish_promise_list)
+        must_finish_promise_list.push(find_p)
+        console.log('pushed to must_finish_promise_list. TAG: D')
+
     # Phase two: deleted local notes not needed
     # Notes that should be deleted:
     # not in remote and status is not new/modified
-    @get_all_notes().then (notes) =>
+    p = @get_all_notes().then (notes) =>
       for n in notes
         if (n.guid not in remote_note_guid_list) && n.status != @NOTE_STATUS.NEW && n.status != @NOTE_STATUS.MODIFIED
-          @delete_note(n.guid)
+          _p = @delete_note(n.guid)
+          must_finish_promise_list.push(_p)
+          console.log('pushed to must_finish_promise_list. TAG: E')
+    must_finish_promise_list.push(p)
+    console.log('pushed to must_finish_promise_list. TAG: F')
+
+    console.log('about to return from _merge_remote_notes(). promise list: ' + JSON.stringify(must_finish_promise_list))
+    console.log('check if promises in promise list is actually Promises:')
+    for p in must_finish_promise_list
+      if p instanceof Promise
+        console.log('is Promise!')
+      else
+        console.log('is NOT Promise!!')
+    return Promise.all(must_finish_promise_list)
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| DB Operations >
 
   get_all_notes: () =>
+    console.log('get_all_notes() invoked')
     return new Promise (resolve, reject) =>
       resolve(@db_server.notes.query().all().execute())
 
   delete_note: (guid) =>
     console.log('delete_note(' + guid + ') invoked')
-    @find_note_by_guid(guid).then(
+    return @find_note_by_guid(guid).then(
       (note) =>
         alert('!!')
         if note is null
@@ -725,7 +780,7 @@ markever.factory 'noteManager', ['apiClient', 'imageManager', (apiClient, imageM
         console.log('find_note_by_guid(' + guid + ') returned null')
         return null
       else
-        console.log('find_note_by_guid(' + guid + ') hit: ' + JSON.stringify(notes[0]))
+        console.log('find_note_by_guid(' + guid + ') hit')
         return notes[0]
 
   # ------------------------------------------------------------
