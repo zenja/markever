@@ -95,10 +95,15 @@ markever.controller 'EditorController',
     jq_html_div.find('img[src]').each (index) ->
       $img = $(this)
       uuid = $img.attr('src')
-      data_src = imageManager.get_image_data_from_uuid(uuid)
-      if data_src
-        $img.attr('longdesc', uuid)
-        $img.attr('src', data_src)
+      imageManager.find_image_by_uuid(uuid).then(
+        (image) =>
+          if image?
+            console.log('change img src from ' + uuid + ' to its base64 content')
+            $img.attr('longdesc', uuid)
+            $img.attr('src', image.content)
+        (error) =>
+          alert('vm.html_post_process() failed due to failure in imageManager.find_image_by_uuid(' + uuid + ')')
+      )
 
   # ------------------------------------------------------------------------------------------------------------------
   # Operations for notes
@@ -255,8 +260,8 @@ markever.controller 'EditorController',
     console.log(JSON.stringify(items))
     if items[0].type.match(/image.*/)
       blob = items[0].getAsFile()
-      image_info = imageManager.load_image_blob(blob)
-      vm.ace_editor.insert('![Alt text](' + image_info.uuid + ')')
+      image_uuid = imageManager.load_image_blob(blob)
+      vm.ace_editor.insert('![Alt text](' + image_uuid + ')')
 
   # ------------------------------------------------------------------------------------------------------------------
   # settings modal
@@ -515,12 +520,21 @@ markever.factory 'dbProvider', -> new class DBProvider
       version: 1
       schema: {
         notes: {
-          key: { keyPath: 'id' , autoIncrement: true },
+          key: {keyPath: 'id', autoIncrement: true},
           indexes: {
             guid: {}
             title: {}
             status: {}
-            md: {}
+            # no need to index md
+            # md: {}
+          }
+        }
+        images: {
+          key: {keyPath: 'id', autoIncrement: true},
+          indexes: {
+            uuid: {}
+            # no need to index content
+            # content: {}
           }
         }
       }
@@ -534,31 +548,58 @@ markever.factory 'dbProvider', -> new class DBProvider
 # ----------------------------------------------------------------------------------------------------------------------
 # Service: imageManager
 # ----------------------------------------------------------------------------------------------------------------------
-markever.factory 'imageManager', ['uuid2', (uuid2) -> new class ImageManager
-  _image_data_map: {}
+markever.factory 'imageManager', ['uuid2', 'dbProvider', (uuid2, dbProvider) -> new class ImageManager
+  constructor: ->
+    dbProvider.get_db_server_promise().then (server) =>
+      @db_server = server
+      console.log('DB initialized from ImageManager')
 
-  get_image_data_from_uuid: (uuid) =>
-    return @_image_data_map[uuid]
+  # ------------------------------------------------------------
+  # Return a copy of a image in db with a given uuid
+  #
+  # return: promise containing the image's info:
+  #         uuid, content
+  #         or null if image does not exist
+  # ------------------------------------------------------------
+  find_image_by_uuid: (uuid) =>
+    p = new Promise (resolve, reject) =>
+      resolve(@db_server.images.query().filter('uuid', uuid).execute())
+    return p.then (images) =>
+      if images.length == 0
+        console.log('find_image_by_uuid(' + uuid + ') returned null')
+        return null
+      else
+        console.log('find_image_by_uuid(' + uuid + ') hit')
+        return images[0]
 
-  # param data is base64 data url
-  add_image_data_mapping: (uuid, data) =>
-    @_image_data_map[uuid] = data
+  # ------------------------------------------------------------
+  # Add a image to db
+  #
+  # return: promise
+  # ------------------------------------------------------------
+  add_image: (uuid, content) =>
+    console.log('Adding image to db - uuid: ' + uuid)
+    return new Promise (resolve, reject) =>
+      resolve(
+        @db_server.images.add({
+          uuid: uuid
+          content: content
+        })
+      )
 
+  # return: the uuid of the image (NOT promise)
   load_image_blob: (blob, extra_handler) =>
     uuid = uuid2.newuuid()
     reader = new FileReader()
     reader.onload = (event) =>
       console.log("image result: " + event.target.result)
-      @add_image_data_mapping(uuid, event.target.result)
+      @add_image(uuid, event.target.result)
       # optional extra_handler
       if extra_handler
         extra_handler(event)
     # start reading blob data, and get result in base64 data URL
     reader.readAsDataURL(blob)
-    return {
-      uuid: uuid
-      data: @get_image_data_from_uuid(uuid)
-    }
+    return uuid
 ]
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -588,7 +629,7 @@ markever.factory 'noteManager',
   constructor: ->
     dbProvider.get_db_server_promise().then (server) =>
       @db_server = server
-      console.log('DB initialized')
+      console.log('DB initialized from NoteManager')
 
   NOTE_STATUS:
     NEW: 0
@@ -808,7 +849,8 @@ markever.factory 'noteManager',
     # register resource data into ImageManager
     if note.resources
       for r in note.resources
-        imageManager.add_image_data_mapping(r.uuid, r.data_url)
+        imageManager.add_image(r.uuid, r.data_url).catch (error) =>
+          alert('add image failed! uuid: ' + r.uuid)
         console.log("register uuid: " + r.uuid + " data len: " + r.data_url.length)
     # update notes db
     return new Promise (resolve, reject) =>
