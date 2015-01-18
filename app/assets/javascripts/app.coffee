@@ -55,6 +55,17 @@ markever.controller 'EditorController',
     # sync scroll
     scrollSyncor.syncScroll(vm.ace_editor, $('#md_html_div'))
 
+    # make new note
+    noteManager.make_new_note().then(
+      (note) =>
+        console.log('New note made: ' + JSON.stringify(note))
+        vm.note.guid = note.guid
+        vm.note.title = note.title
+        vm.set_md(note.md)
+      (error) =>
+        alert('make_new_note() failed!')
+    )
+
     # get note list
     vm.refresh_all_notes()
 
@@ -606,8 +617,8 @@ markever.factory 'imageManager', ['uuid2', 'dbProvider', (uuid2, dbProvider) -> 
 # Service: noteManager
 # ----------------------------------------------------------------------------------------------------------------------
 markever.factory 'noteManager',
-['dbProvider', 'apiClient', 'imageManager',
-(dbProvider, apiClient, imageManager) -> new class NoteManager
+['uuid2', 'dbProvider', 'apiClient', 'imageManager',
+(uuid2, dbProvider, apiClient, imageManager) -> new class NoteManager
 
   # Status of a note:
   # 1. new: note with a generated guid, not attached to remote
@@ -781,6 +792,24 @@ markever.factory 'noteManager',
     console.log('get_all_notes() invoked')
     return new Promise (resolve, reject) =>
       resolve(@db_server.notes.query().all().execute())
+
+  # ------------------------------------------------------------
+  # make a new note to db
+  #
+  # db_server safe. will get db_server itself
+  # return promise
+  # ------------------------------------------------------------
+  make_new_note: () =>
+    console.log('make_new_note() invoking')
+    return new Promise (resolve, reject) =>
+      p = dbProvider.get_db_server_promise().then (server) =>
+        server.notes.add({
+          guid: uuid2.newguid() + '-new'
+          title: 'New Note - Markever'
+          md: ''
+          status: @NOTE_STATUS.NEW
+        })
+      resolve(p)
 
   delete_note: (guid) =>
     console.log('delete_note(' + guid + ') invoked')
