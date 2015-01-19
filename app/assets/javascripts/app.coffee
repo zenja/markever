@@ -3,10 +3,10 @@
 markever = angular.module('markever', ['ngResource', 'ui.bootstrap', 'LocalStorageModule', 'angularUUID2'])
 
 markever.controller 'EditorController',
-['$scope', '$window', '$document', '$http', '$sce',
- 'localStorageService', 'enmlRenderer', 'scrollSyncor', 'apiClient', 'noteManager', 'imageManager',
-($scope, $window, $document, $http, $sce,
- localStorageService, enmlRenderer, scrollSyncor, apiClient, noteManager, imageManager) ->
+['$scope', '$window', '$document', '$http', '$sce', '$interval'
+ 'localStorageService', 'enmlRenderer', 'scrollSyncor', 'apiClient', 'noteManager', 'imageManager', 'dbProvider'
+($scope, $window, $document, $http, $sce, $interval
+ localStorageService, enmlRenderer, scrollSyncor, apiClient, noteManager, imageManager, dbProvider) ->
   vm = this
 
   # ------------------------------------------------------------------------------------------------------------------
@@ -17,6 +17,19 @@ markever.controller 'EditorController',
     guid: ""
     title: ""
     _markdown: ""
+    _is_dirty: false
+
+  vm.get_guid = ->
+    return vm.note.guid
+
+  vm.set_guid = (guid) ->
+    vm.note.guid = guid
+
+  vm.get_title = ->
+    return vm.note.title
+
+  vm.set_title = (title) ->
+    vm.note.title = title
 
   # markdown should only be get from this getter
   vm.get_md = ->
@@ -24,13 +37,34 @@ markever.controller 'EditorController',
 
   vm.set_md = (md) ->
     vm.note._markdown = md
+    vm.set_note_dirty(true)
 
   vm.set_md_and_update_editor = (md) ->
-    vm.note._markdown = md
+    vm.set_md(md)
     vm.ace_editor.setValue(md)
+
+  vm.is_note_dirty = () ->
+    return vm.note._is_dirty
+
+  vm.set_note_dirty = (is_dirty) ->
+    vm.note._is_dirty = is_dirty
 
   # note lists containing only title and guid
   vm.all_notes = {}
+
+  # ------------------------------------------------------------------------------------------------------------------
+  # Debugging methods
+  # ------------------------------------------------------------------------------------------------------------------
+  vm._debug_show_current_note = () ->
+    alert(JSON.stringify(vm.note))
+
+  vm._debug_close_db = () ->
+    dbProvider.close_db()
+    alert('db closed!')
+
+  vm._debug_show_current_note_in_db = () ->
+    noteManager.find_note_by_guid(vm.get_guid()).then (note) =>
+      alert('current note (' + vm.get_guid() + ') in db is: ' + JSON.stringify(note))
 
   # ------------------------------------------------------------------------------------------------------------------
   # App ready status
@@ -58,13 +92,15 @@ markever.controller 'EditorController',
     # make new note
     noteManager.make_new_note().then(
       (note) =>
+        vm.set_guid(note.guid)
+        vm.set_title(note.title)
+        # activate updating md and html
+        vm.set_md_and_update_editor(note.md)
+        vm.render_html($('#md_html_div'))
         console.log('New note made: ' + JSON.stringify(note))
-        vm.note.guid = note.guid
-        vm.note.title = note.title
-        vm.set_md(note.md)
       (error) =>
         alert('make_new_note() failed!')
-    )
+    ).catch (error) => alert('make new note failed!')
 
     # get note list
     vm.refresh_all_notes()
@@ -76,6 +112,9 @@ markever.controller 'EditorController',
 
     # reset app status
     vm.reset_status()
+
+    # save current note to db periodically
+    $interval(vm.save_current_note_to_db, 1000)
 
     # all ready
     vm.all_ready = true
@@ -147,6 +186,23 @@ markever.controller 'EditorController',
           alert('load note ' + guid + ' failed: ' + JSON.stringify(error))
           vm.close_loading_modal()
       )
+
+  vm.save_current_note_to_db = () ->
+    if vm.is_note_dirty()
+      console.log('current note is dirty, saving to db...')
+      note_info =
+        guid: vm.get_guid()
+        # we don't need to care about title now,
+        # because real title will be produced when syncing local notes to remote
+        title: vm.get_title()
+        md: vm.get_md()
+      noteManager.update_note(note_info).then(
+        (note) ->
+          console.log('dirty note successfully saved to db: ' + JSON.stringify(note) + ', set it to not dirty.')
+          vm.set_note_dirty(false)
+        (error) ->
+          alert('update note failed in save_current_note_to_db(): ' + JSON.stringify(error))
+      ).catch (error) => alert('failed to save current note to db!')
 
   # ------------------------------------------------------------------------------------------------------------------
   # App Status
@@ -556,6 +612,11 @@ markever.factory 'dbProvider', -> new class DBProvider
     console.log('return @db_server_promise')
     return @db_server_promise
 
+  close_db: () =>
+    @db_server_promise.then (server) =>
+      server.close()
+      console.log('db closed')
+
 # ----------------------------------------------------------------------------------------------------------------------
 # Service: imageManager
 # ----------------------------------------------------------------------------------------------------------------------
@@ -802,13 +863,23 @@ markever.factory 'noteManager',
   make_new_note: () =>
     console.log('make_new_note() invoking')
     return new Promise (resolve, reject) =>
-      p = dbProvider.get_db_server_promise().then (server) =>
-        server.notes.add({
-          guid: uuid2.newguid() + '-new'
-          title: 'New Note - Markever'
-          md: ''
-          status: @NOTE_STATUS.NEW
-        })
+      guid = uuid2.newguid() + '-new'
+      db_server_p = new Promise (resolve, reject) =>
+        # db.js does not return real Promise...
+        _false_p = dbProvider.get_db_server_promise().then (server) =>
+            server.notes.add({
+              guid: guid
+              title: 'New Note - Markever'
+              md: 'New Note\n==\n'
+              status: @NOTE_STATUS.NEW
+            })
+        resolve(_false_p)
+      p = db_server_p.then(
+        () =>
+          return @find_note_by_guid(guid)
+        (error) =>
+          alert('make_new_note() error!')
+      )
       resolve(p)
 
   delete_note: (guid) =>
@@ -873,17 +944,33 @@ markever.factory 'noteManager',
   # Update a note
   # return: promise
   # ------------------------------------------------------------
-  update_note: (note) ->
-    console.log('update_note(' + note.guid + ')')
+  update_note: (note) =>
+    if note.guid? == false
+      alert('update_note(): note to be updated must have a guid!')
+    console.log('update_note(' + note.guid + ') invoking')
     # register resource data into ImageManager
-    if note.resources
+    if note.resources?
       for r in note.resources
         imageManager.add_image(r.uuid, r.data_url).catch (error) =>
           alert('add image failed! uuid: ' + r.uuid)
         console.log("register uuid: " + r.uuid + " data len: " + r.data_url.length)
     # update notes db
-    return new Promise (resolve, reject) =>
-      resolve(@db_server.notes.query('guid').only(note['guid']).modify(note).execute())
+    p = new Promise (resolve, reject) =>
+      _note_modify = {}
+      if note.title?
+        _note_modify.title = note.title
+      if note.md?
+        _note_modify.md = note.md
+      if note.status?
+        _note_modify.status = note.status
+      resolve(@db_server.notes.query().filter('guid', note.guid).modify(_note_modify).execute())
+    return p.then(
+      () =>
+        console.log('update note ' + note.guid + ' successfully')
+        return @find_note_by_guid(note.guid)
+      (error) =>
+        alert('update note ' + note.guid + ' failed!')
+    )
 
   # ------------------------------------------------------------
   # Clear db
