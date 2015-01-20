@@ -180,15 +180,30 @@ markever.controller 'EditorController',
     # check if the note to be loaded is already current note
     if guid != vm.get_guid()
       vm.open_loading_modal()
-      noteManager.fetch_remote_note(guid).then(
-        (note) ->
-          # TODO handle other status
-          vm.change_current_note(guid=note.guid, title=note.title, md=note.md)
-          vm.close_loading_modal()
-        (error) ->
-          alert('load note ' + guid + ' failed: ' + JSON.stringify(error))
-          vm.close_loading_modal()
-      )
+      p = noteManager.find_note_by_guid(guid).then (note) =>
+        if note? and
+          (note.status == noteManager.NOTE_STATUS.NEW or
+          note.status == noteManager.NOTE_STATUS.SYNCED_ALL or
+          note.status == noteManager.NOTE_STATUS.MODIFIED)
+            # note in db -> current note
+            console.log('loading note ' + note.guid + ' with status ' + note.status + ' from local DB')
+            vm.change_current_note(guid=note.guid, title=note.title, md=note.md)
+            vm.close_loading_modal()
+            console.log('loading note ' + note.guid + ' finished')
+        if (note? == false) or (note.status == noteManager.NOTE_STATUS.SYNCED_META)
+          # remote note -> current note
+          noteManager.fetch_remote_note(guid).then(
+            (note) ->
+              console.log('loading note ' + note.guid + ' with status ' + note.status + ' from remote')
+              vm.change_current_note(guid=note.guid, title=note.title, md=note.md)
+              vm.close_loading_modal()
+              console.log('loading note ' + note.guid + ' finished')
+            (error) ->
+              alert('load note ' + guid + ' failed: ' + JSON.stringify(error))
+              vm.close_loading_modal()
+          )
+      p.catch (error) =>
+        alert('find_note_by_guid() itself or then() failed in load_note(): ' + JSON.stringify(error))
 
   vm.save_current_note_to_db = () ->
     if vm.is_note_dirty()
