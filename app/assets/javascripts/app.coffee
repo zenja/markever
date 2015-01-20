@@ -828,12 +828,8 @@ markever.factory 'noteManager',
                 # fetch the whole note from server and update local
                 console.log('local note ' + guid + ' is SYNCED_ALL, about to fetch from remote for updating')
                 @fetch_remote_note(guid).then(
-                  (data) =>
-                    note =
-                      guid: data.note.guid
-                      title: data.note.title
-                      md: data.note.md
-                    p = @update_note(note)
+                  (note) =>
+                    console.log('note ' + guid + ' (SYNCED_ALL) updated from remote')
                     # maybe FIXME did not add to promise waiting list
                     #_find_p_must_finish_promise_list.push(p)
                     #console.log('pushed to _find_p_must_finish_promise_list. TAG: C')
