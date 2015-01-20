@@ -198,6 +198,14 @@ markever.controller 'EditorController',
               vm.change_current_note(guid=note.guid, title=note.title, md=note.md)
               vm.close_loading_modal()
               console.log('loading note ' + note.guid + ' finished')
+              # updating note list
+              noteManager.get_all_notes().then(
+                (notes) ->
+                  console.log('updating note lists')
+                  vm.all_notes = notes
+                (error) ->
+                  alert('get_all_notes() failed in load_note()')
+              )
             (error) ->
               alert('load note ' + guid + ' failed: ' + JSON.stringify(error))
               vm.close_loading_modal()
@@ -730,9 +738,9 @@ markever.factory 'noteManager',
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Remote Operations >
 
   # ------------------------------------------------------------
-  # Fetch a remote note's all info by guid
+  # Fetch a remote note's all info by guid and update db
   #
-  # check if note is in local first
+  # check if note is in local and is SYNCED_ALL first
   # return: promise containing note's info
   # ------------------------------------------------------------
   fetch_remote_note: (guid) =>
@@ -751,11 +759,10 @@ markever.factory 'noteManager',
             md: data.note.md
             status: @NOTE_STATUS.SYNCED_ALL
             resources: data.note.resources
-          @update_note(_note)
-          return _note
+          return @update_note(_note)
 
   # ------------------------------------------------------------
-  # Load remote note list to update local notes info
+  # Load remote note list (only metadata) to update local notes info
   # return: promise
   # ------------------------------------------------------------
   load_remote_notes: =>
