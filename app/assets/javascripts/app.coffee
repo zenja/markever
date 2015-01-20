@@ -158,29 +158,32 @@ markever.controller 'EditorController',
   # ------------------------------------------------------------------------------------------------------------------
   # Operations for notes
   # ------------------------------------------------------------------------------------------------------------------
+  vm.change_current_note = (guid, title, md) ->
+    vm.set_guid(guid) if guid?
+    vm.set_title(title) if title?
+    vm.set_md_and_update_editor(md) if md?
+    # render html
+    vm.render_html($('#md_html_div'))
+
   # TODO prevent multiple duplicated requests
   vm.refresh_all_notes = ->
     # TODO handle failure
-    noteManager.load_remote_notes().then (notes) ->
+    noteManager.load_remote_notes().then(
+      (notes) ->
         console.log('load_remote_notes() result: ' + JSON.stringify(notes))
         vm.all_notes = notes
+      (error) ->
+        alert('load_remote_notes() failed: ' + JSON.stringify(error))
+    )
 
   vm.load_note = (guid) ->
     # check if the note to be loaded is already current note
-    if guid != vm.note.guid
+    if guid != vm.get_guid()
       vm.open_loading_modal()
       noteManager.fetch_remote_note(guid).then(
         (note) ->
           # TODO handle other status
-          # extract markdown
-          md = note.md
-          vm.set_md_and_update_editor(md)
-          # render html
-          vm.render_html($('#md_html_div'))
-          # set note info
-          vm.note.guid = note.guid
-          vm.note.title = note.title
-          # close modal
+          vm.change_current_note(guid=note.guid, title=note.title, md=note.md)
           vm.close_loading_modal()
         (error) ->
           alert('load note ' + guid + ' failed: ' + JSON.stringify(error))
