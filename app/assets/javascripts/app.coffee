@@ -89,14 +89,26 @@ markever.controller 'EditorController',
     # sync scroll
     scrollSyncor.syncScroll(vm.ace_editor, $('#md_html_div'))
 
-    # make new note
-    noteManager.make_new_note().then(
-      (note) =>
-        vm.change_current_note(guid=note.guid, title=note.title, md=note.md)
-        console.log('New note made: ' + JSON.stringify(note))
-      (error) =>
-        alert('make_new_note() failed!')
-    ).catch (error) => alert('make new note failed!')
+    # get previous note guid from local storage,
+    # if exists such note, load it,
+    # else make new note
+    previous_note_guid = localStorageService.get(vm.SETTINGS_KEY.CURRENT_NOTE_GUID)
+    if previous_note_guid? == false
+      previous_note_guid = "INVALID_GUID"
+    p = noteManager.find_note_by_guid(previous_note_guid).then (note) =>
+      if note?
+        console.log('got valid previous current note ' + previous_note_guid + '. load...')
+        vm.load_note(note.guid)
+      else
+        console.log('no valid previous current note found. create new note')
+        noteManager.make_new_note().then(
+          (note) =>
+            vm.change_current_note(guid=note.guid, title=note.title, md=note.md)
+            console.log('New note made: ' + JSON.stringify(note))
+          (error) =>
+            alert('make_new_note() failed!')
+        ).catch (error) => alert('make new note failed!')
+    p.catch (error) => alert('load previous current note failed')
 
     # get note list
     vm.refresh_all_notes()
@@ -160,6 +172,8 @@ markever.controller 'EditorController',
     vm.set_md_and_update_editor(md) if md?
     # render html
     vm.render_html($('#md_html_div'))
+    # save current note guid to local storage
+    localStorageService.set(vm.SETTINGS_KEY.CURRENT_NOTE_GUID, guid)
 
   # TODO prevent multiple duplicated requests
   vm.refresh_all_notes = ->
@@ -243,6 +257,7 @@ markever.controller 'EditorController',
     KEYBOARD_HANDLER: 'settings.keyboard_handler'
     SHOW_GUTTER: 'settings.show_gutter'
     ACE_THEME: 'settings.ace_theme'
+    CURRENT_NOTE_GUID: 'settings.current_note.guid'
 
   # --------------------------------------------------------
   # Editor Keyboard Handler Settings
@@ -628,10 +643,13 @@ markever.factory 'dbProvider', -> new class DBProvider
         }
       }
     }
-    return db.open(db_open_option)
+    # db.js promise is not real promise
+    _false_db_p = db.open(db_open_option)
+    return new Promise (resolve, reject) =>
+      resolve(_false_db_p)
 
   get_db_server_promise: () =>
-    console.log('return @db_server_promise')
+    console.log('return real promise @db_server_promise')
     return @db_server_promise
 
   close_db: () =>
@@ -925,14 +943,17 @@ markever.factory 'noteManager',
 
   # ------------------------------------------------------------
   # Return a copy of a note in db with a given guid
+  #
+  # db_server safe. will get db_server itself
   # return: promise containing the note's info,
   #         or null if note does not exist
   # ------------------------------------------------------------
   find_note_by_guid: (guid) =>
     # db.js then() does not return a Promise,
     # need to be wrapper in a real Promise
-    p = new Promise (resolve, reject) =>
-      resolve(@db_server.notes.query().filter('guid', guid).execute())
+    p = dbProvider.get_db_server_promise().then (server) =>
+      return new Promise (resolve, reject) =>
+        resolve(server.notes.query().filter('guid', guid).execute())
     return p.then (notes) =>
       if notes.length == 0
         console.log('find_note_by_guid(' + guid + ') returned null')
