@@ -50,7 +50,16 @@ markever.controller 'EditorController',
     vm.note._is_dirty = is_dirty
 
   # note lists containing only title and guid
-  vm.all_notes = {}
+  vm._all_notes = []
+
+  vm.set_note_list = (note_arr) ->
+    vm._all_notes = note_arr
+    console.log('note list updated')
+
+  vm.reload_local_note_list = () ->
+    p = noteManager.get_all_notes().then (notes) ->
+      vm.set_note_list(notes)
+    p.catch (error) -> alert('reload_local_note_list() failed')
 
   # ------------------------------------------------------------------------------------------------------------------
   # Debugging methods
@@ -181,7 +190,7 @@ markever.controller 'EditorController',
     noteManager.load_remote_notes().then(
       (notes) ->
         console.log('load_remote_notes() result: ' + JSON.stringify(notes))
-        vm.all_notes = notes
+        vm.set_note_list(notes)
       (error) ->
         alert('load_remote_notes() failed: ' + JSON.stringify(error))
     )
@@ -212,7 +221,7 @@ markever.controller 'EditorController',
               noteManager.get_all_notes().then(
                 (notes) ->
                   console.log('updating note lists')
-                  vm.all_notes = notes
+                  vm.set_note_list(notes)
                 (error) ->
                   alert('get_all_notes() failed in load_note()')
               )
@@ -927,9 +936,9 @@ markever.factory 'noteManager',
           console.log('about to remove note id ' + note.id)
           p = dbProvider.get_db_server_promise().then (server) =>
             server.notes.remove(note.id)
+            console.log('local note ' + note.guid + ' deleted. id: ' + note.id)
           p.catch (error) =>
             alert('delete_note(' + guid + ') failed')
-          console.log('local note ' + note.guid + ' deleted. id: ' + note.id)
       (error) =>
         alert('error!')
     )
