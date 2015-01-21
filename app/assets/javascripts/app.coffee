@@ -61,6 +61,28 @@ markever.controller 'EditorController',
       vm.set_note_list(notes)
     p.catch (error) -> alert('reload_local_note_list() failed')
 
+  vm.get_enml_and_title_from_md = (md) ->
+    html_div_hidden = $('#md_html_div_hidden')
+    enml = enmlRenderer.getEnmlFromElement(
+      html_div_hidden,
+      vm.render_html,
+      md
+    )
+    title = 'New Note - Markever'
+    if html_div_hidden.find('h1').size() > 0
+      text = html_div_hidden.find('h1').text()
+      title = text if text.trim().length > 0
+    else if html_div_hidden.find('h2').size() > 0
+      text = html_div_hidden.find('h2').text()
+      title = text if text.trim().length > 0
+    else if html_div_hidden.find('h3').size() > 0
+      text = html_div_hidden.find('h3').text()
+      title = text if text.trim().length > 0
+    else if html_div_hidden.find('p').size() > 0
+      text = html_div_hidden.find('p').text()
+      title = text if text.trim().length > 0
+    return {enml: enml, title: title}
+
   # ------------------------------------------------------------------------------------------------------------------
   # Debugging methods
   # ------------------------------------------------------------------------------------------------------------------
@@ -177,6 +199,7 @@ markever.controller 'EditorController',
   # ------------------------------------------------------------------------------------------------------------------
   vm.change_current_note = (guid, title, md) ->
     vm.set_guid(guid) if guid?
+    # FIXME generate title from md
     vm.set_title(title) if title?
     vm.set_md_and_update_editor(md) if md?
     # render html
@@ -420,33 +443,17 @@ markever.controller 'EditorController',
     $('#loading-modal').modal('hide')
 
   # ------------------------------------------------------------------------------------------------------------------
-  # save note
+  # sync current note to remote
   # ------------------------------------------------------------------------------------------------------------------
   vm.save_note = ->
     if vm.saving_note == false
       # set status
       vm.saving_note = true
-      # fill the hidden html div
-      html_div_hidden = $('#md_html_div_hidden')
-      enml = enmlRenderer.getEnmlFromElement(
-        html_div_hidden,
-        vm.render_html,
-        vm.get_md()
-      )
-      # set title to content of first H1, H2, H3, H4 tag
-      vm.set_title('New Note - Markever')
-      if html_div_hidden.find('h1').size() > 0
-        text = html_div_hidden.find('h1').text()
-        vm.set_title(text) if text.trim().length > 0
-      else if html_div_hidden.find('h2').size() > 0
-        text = html_div_hidden.find('h2').text()
-        vm.set_title(text) if text.trim().length > 0
-      else if html_div_hidden.find('h3').size() > 0
-        text = html_div_hidden.find('h3').text()
-        vm.set_title(text) if text.trim().length > 0
-      else if html_div_hidden.find('p').size() > 0
-        text = html_div_hidden.find('p').text()
-        vm.set_title(text) if text.trim().length > 0
+      # get enml and title
+      _enml_and_title = vm.get_enml_and_title_from_md(vm.get_md())
+      enml = _enml_and_title['enml']
+      title = _enml_and_title['title']
+      vm.set_title(title)
       # invoke the api
       # TODO handle error
       apiClient.notes.save({
