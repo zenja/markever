@@ -903,7 +903,7 @@ markever.factory 'noteManager',
         _false_p = dbProvider.get_db_server_promise().then (server) =>
             server.notes.add({
               guid: guid
-              title: 'New Note - Markever'
+              title: 'New Note'
               md: 'New Note\n==\n'
               status: @NOTE_STATUS.NEW
             })
