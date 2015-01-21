@@ -425,29 +425,29 @@ markever.controller 'EditorController',
         vm.get_md()
       )
       # set title to content of first H1, H2, H3, H4 tag
-      vm.note.title = 'New Note - Markever'
+      vm.set_title('New Note - Markever')
       if html_div_hidden.find('h1').size() > 0
         text = html_div_hidden.find('h1').text()
-        vm.note.title = text if text.trim().length > 0
+        vm.set_title(text) if text.trim().length > 0
       else if html_div_hidden.find('h2').size() > 0
         text = html_div_hidden.find('h2').text()
-        vm.note.title = text if text.trim().length > 0
+        vm.set_title(text) if text.trim().length > 0
       else if html_div_hidden.find('h3').size() > 0
         text = html_div_hidden.find('h3').text()
-        vm.note.title = text if text.trim().length > 0
+        vm.set_title(text) if text.trim().length > 0
       else if html_div_hidden.find('p').size() > 0
         text = html_div_hidden.find('p').text()
-        vm.note.title = text if text.trim().length > 0
+        vm.set_title(text) if text.trim().length > 0
       # invoke the api
       # TODO handle error
       apiClient.notes.save({
-          guid: vm.note.guid,
-          title: vm.note.title,
+          guid: vm.get_guid()
+          title: vm.get_title()
           enml: enml,
         }).$promise.then(
           (data) ->
             # update guid
-            vm.note.guid = data.note.guid
+            vm.set_guid(data.note.guid)
             # set status back
             vm.saving_note = false
             alert('create/update note succeed: \n' + JSON.stringify(data))
