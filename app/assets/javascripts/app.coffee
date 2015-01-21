@@ -92,11 +92,7 @@ markever.controller 'EditorController',
     # make new note
     noteManager.make_new_note().then(
       (note) =>
-        vm.set_guid(note.guid)
-        vm.set_title(note.title)
-        # activate updating md and html
-        vm.set_md_and_update_editor(note.md)
-        vm.render_html($('#md_html_div'))
+        vm.change_current_note(guid=note.guid, title=note.title, md=note.md)
         console.log('New note made: ' + JSON.stringify(note))
       (error) =>
         alert('make_new_note() failed!')
