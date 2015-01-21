@@ -149,7 +149,7 @@ markever.controller 'EditorController',
   # markdown render functions
   # ------------------------------------------------------------------------------------------------------------------
   vm.render_html = (jq_html_div) ->
-    jq_html_div.html($window.marked(vm.get_md()))
+    jq_html_div.html($window.marked(vm.get_md(), {sanitize: true}))
     vm.html_post_process(jq_html_div)
 
   vm.html_post_process = (jq_html_div) ->
