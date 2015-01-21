@@ -650,7 +650,10 @@ markever.factory 'dbProvider', -> new class DBProvider
 
   get_db_server_promise: () =>
     console.log('return real promise @db_server_promise')
-    return @db_server_promise
+    if @db_server_promise?
+      return @db_server_promise
+    else
+      return @init_db()
 
   close_db: () =>
     @db_server_promise.then (server) =>
@@ -737,11 +740,6 @@ markever.factory 'noteManager',
   #                  | load note data from remote
   #                  |
   # synced_meta ------
-
-  constructor: ->
-    dbProvider.get_db_server_promise().then (server) =>
-      @db_server = server
-      console.log('DB initialized from NoteManager')
 
   NOTE_STATUS:
     NEW: 0
@@ -884,15 +882,16 @@ markever.factory 'noteManager',
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| DB Operations >
 
+  # db server safe. will get db server itself
   get_all_notes: () =>
     console.log('get_all_notes() invoked')
-    return new Promise (resolve, reject) =>
-      resolve(@db_server.notes.query().all().execute())
+    return dbProvider.get_db_server_promise().then (server) =>
+      return server.notes.query().all().execute()
 
   # ------------------------------------------------------------
   # make a new note to db
   #
-  # db_server safe. will get db_server itself
+  # db server safe. will get db server itself
   # return promise
   # ------------------------------------------------------------
   make_new_note: () =>
@@ -917,34 +916,38 @@ markever.factory 'noteManager',
       )
       resolve(p)
 
+  # db server safe. will get db server itself
   delete_note: (guid) =>
     console.log('delete_note(' + guid + ') invoked')
     return @find_note_by_guid(guid).then(
       (note) =>
-        alert('!!')
         if note is null
           console.log('cannot delete note null, aborted')
         else
           console.log('about to remove note id ' + note.id)
-          @db_server.notes.remove(note.id)
+          p = dbProvider.get_db_server_promise().then (server) =>
+            server.notes.remove(note.id)
+          p.catch (error) =>
+            alert('delete_note(' + guid + ') failed')
           console.log('local note ' + note.guid + ' deleted. id: ' + note.id)
-      ,(error) =>
+      (error) =>
         alert('error!')
     )
 
   # fixme for debug
   add_fake_note: () =>
-    @db_server.notes.add({
-      guid: '9999-9999-9999-9999'
-      title: 'fake title'
-      status: @NOTE_STATUS.SYNCED_META
-    }).then () ->
-      alert('fake note added to db')
+    dbProvider.get_db_server_promise().then (server) =>
+      server.notes.add({
+        guid: '9999-9999-9999-9999'
+        title: 'fake title'
+        status: @NOTE_STATUS.SYNCED_META
+      }).then () ->
+        alert('fake note added to db')
 
   # ------------------------------------------------------------
   # Return a copy of a note in db with a given guid
   #
-  # db_server safe. will get db_server itself
+  # db server safe. will get db server itself
   # return: promise containing the note's info,
   #         or null if note does not exist
   # ------------------------------------------------------------
@@ -965,21 +968,25 @@ markever.factory 'noteManager',
   # ------------------------------------------------------------
   # Add a remote note's metadata which is not in local db to db
   #
+  # db server safe. will get db server itself
   # return: promise
   # ------------------------------------------------------------
   add_note_meta: (note) ->
     console.log('Adding note to db - guid: ' + note.guid + ' title: ' + note.title)
-    return new Promise (resolve, reject) =>
-      resolve(
-        @db_server.notes.add({
-          guid: note.guid
-          title: note.title
-          status: @NOTE_STATUS.SYNCED_META
-        })
-      )
+    return dbProvider.get_db_server_promise().then (server) =>
+      return new Promise (resolve, reject) =>
+        resolve(
+          server.notes.add({
+            guid: note.guid
+            title: note.title
+            status: @NOTE_STATUS.SYNCED_META
+          })
+        )
 
   # ------------------------------------------------------------
   # Update a note
+  #
+  # db server safe. will get db server itself
   # return: promise
   # ------------------------------------------------------------
   update_note: (note) =>
@@ -1001,7 +1008,9 @@ markever.factory 'noteManager',
         _note_modify.md = note.md
       if note.status?
         _note_modify.status = note.status
-      resolve(@db_server.notes.query().filter('guid', note.guid).modify(_note_modify).execute())
+      _modify_p = dbProvider.get_db_server_promise().then (server) =>
+          return server.notes.query().filter('guid', note.guid).modify(_note_modify).execute()
+      resolve(_modify_p)
     return p.then(
       () =>
         console.log('update note ' + note.guid + ' successfully')
@@ -1012,11 +1021,13 @@ markever.factory 'noteManager',
 
   # ------------------------------------------------------------
   # Clear db
+  #
+  # db server safe. will get db server itself
   # return: promise
   # ------------------------------------------------------------
   clear_all_notes: () ->
-    return new Promise (resolve, reject) =>
-      resolve(@db_server.notes.clear())
+    return dbProvider.get_db_server_promise().then (server) =>
+      server.notes.clear()
 
   # --------------------------------- tmp operations --------------------------------
 ]
