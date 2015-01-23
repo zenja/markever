@@ -63,25 +63,12 @@ markever.controller 'EditorController',
 
   vm.get_enml_and_title_from_md = (md) ->
     html_div_hidden = $('#md_html_div_hidden')
-    enml = enmlRenderer.getEnmlFromElement(
+    # return a promise
+    return enmlRenderer.get_enml_and_title_promise(
       html_div_hidden,
       vm.render_html,
       md
     )
-    title = 'New Note - Markever'
-    if html_div_hidden.find('h1').size() > 0
-      text = html_div_hidden.find('h1').text()
-      title = text if text.trim().length > 0
-    else if html_div_hidden.find('h2').size() > 0
-      text = html_div_hidden.find('h2').text()
-      title = text if text.trim().length > 0
-    else if html_div_hidden.find('h3').size() > 0
-      text = html_div_hidden.find('h3').text()
-      title = text if text.trim().length > 0
-    else if html_div_hidden.find('p').size() > 0
-      text = html_div_hidden.find('p').text()
-      title = text if text.trim().length > 0
-    return {enml: enml, title: title}
 
   # ------------------------------------------------------------------------------------------------------------------
   # Debugging methods
@@ -174,7 +161,7 @@ markever.controller 'EditorController',
     processed_md = vm.md_pre_process(vm.get_md())
     _html_dom = $('<div></div>')
     _html_dom.html($window.marked(processed_md, {sanitize: true}))
-    vm.html_post_process(_html_dom).then () ->
+    return vm.html_post_process(_html_dom).then () ->
       jq_html_div.empty()
       jq_html_div.append(_html_dom)
 
@@ -271,19 +258,20 @@ markever.controller 'EditorController',
   vm.save_current_note_to_db = () ->
     if vm.is_note_dirty()
       console.log('current note is dirty, saving to db...')
-      note_info =
-        guid: vm.get_guid()
-        # we don't need to care about title now,
-        # because real title will be produced when syncing local notes to remote
-        title: vm.get_title()
-        md: vm.get_md()
-      noteManager.update_note(note_info).then(
-        (note) ->
-          console.log('dirty note successfully saved to db: ' + JSON.stringify(note) + ', set it to not dirty.')
-          vm.set_note_dirty(false)
-        (error) ->
-          alert('update note failed in save_current_note_to_db(): ' + JSON.stringify(error))
-      ).catch (error) => alert('failed to save current note to db!')
+      enmlRenderer.get_title_promise($('#md_html_div_hidden'), vm.render_html).then (title) =>
+        note_info =
+          guid: vm.get_guid()
+          title: title
+          md: vm.get_md()
+        noteManager.update_note(note_info).then(
+          (note) ->
+            console.log('dirty note successfully saved to db: ' + JSON.stringify(note) + ', set it to not dirty.')
+            # because title may change, we need to reload note list
+            vm.reload_local_note_list()
+            vm.set_note_dirty(false)
+          (error) ->
+            alert('update note failed in save_current_note_to_db(): ' + JSON.stringify(error))
+        ).catch (error) => alert('failed to save current note to db!')
 
   # ------------------------------------------------------------------------------------------------------------------
   # App Status
@@ -462,7 +450,7 @@ markever.controller 'EditorController',
     if vm.saving_note == false
       # set status
       vm.saving_note = true
-      # get enml and title
+      # get enml and title FIXME get_enml_and_title_from_md() returns a promise!
       _enml_and_title = vm.get_enml_and_title_from_md(vm.get_md())
       enml = _enml_and_title['enml']
       title = _enml_and_title['title']
@@ -496,88 +484,121 @@ markever.controller 'EditorController',
 # Service: enmlRenderer
 # ----------------------------------------------------------------------------------------------------------------------
 markever.factory 'enmlRenderer', ['imageManager', (imageManager) ->
-  getEnmlFromElement = (jq_html_div, html_render_func, markdown) ->
-    # init markdown render
-    # html post process
-    html_render_func(jq_html_div)
+  get_enml_and_title_promise = (jq_html_div, html_render_func, markdown) ->
+    # html_render_func has to be a promise
+    return html_render_func(jq_html_div).then () =>
+      # further post process
+      # remove all script tags
+      jq_html_div.find('script').remove()
 
-    # further post process
-    # remove all script tags
-    jq_html_div.find('script').remove()
-
-    # add inline style
-    # refer: https://github.com/Karl33to/jquery.inlineStyler
-    # TODO still too much redundant styles
-    inline_styler_option = {
-      'propertyGroups' : {
-        'font-matters' : ['font-size', 'font-family', 'font-style', 'font-weight'],
-        'text-matters' : ['text-indent', 'text-align', 'text-transform', 'letter-spacing', 'word-spacing',
-                  'word-wrap', 'white-space', 'line-height', 'direction'],
-        'display-matters' : ['display'],
-        'size-matters' : ['width', 'height'],
-        'color-matters' : ['color', 'background-color'],
-        'position-matters' : ['margin', 'margin-left', 'margin-right', 'margin-top', 'margin-bottom',
-                    'padding', 'padding-left', 'padding-right', 'padding-top', 'padding-bottom',
-                    'float'],
-        'border-matters' : ['border', 'border-left', 'border-right', 'border-radius',
-                  'border-top', 'border-right', 'border-color'],
-      },
-      'elementGroups' : {
-        # N.B. UPPERCASE tags
-        'font-matters' : ['DIV', 'BLOCKQUOTE', 'SPAN', 'STRONG', 'EM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'],
-        'text-matters' : ['SPAN', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'],
-        'display-matters' : ['HR', 'PRE', 'SPAN', 'UL', 'OL', 'LI', 'PRE', 'CODE'],
-        'size-matters' : ['SPAN'],
-        'color-matters' : ['DIV', 'SPAN', 'PRE', 'CODE', 'BLOCKQUOTE', 'HR'],
-        'position-matters' : ['DIV', 'PRE', 'BLOCKQUOTE', 'SPAN', 'HR', 'UL', 'OL', 'LI', 'P',
-                    'H1', 'H2', 'H3', 'H4', 'H5', 'H6'],
-        'border-matters' : ['HR', 'BLOCKQUOTE', 'SPAN', 'PRE', 'CODE'],
+      # add inline style
+      # refer: https://github.com/Karl33to/jquery.inlineStyler
+      # TODO still too much redundant styles
+      inline_styler_option = {
+        'propertyGroups' : {
+          'font-matters' : ['font-size', 'font-family', 'font-style', 'font-weight'],
+          'text-matters' : ['text-indent', 'text-align', 'text-transform', 'letter-spacing', 'word-spacing',
+                    'word-wrap', 'white-space', 'line-height', 'direction'],
+          'display-matters' : ['display'],
+          'size-matters' : ['width', 'height'],
+          'color-matters' : ['color', 'background-color'],
+          'position-matters' : ['margin', 'margin-left', 'margin-right', 'margin-top', 'margin-bottom',
+                      'padding', 'padding-left', 'padding-right', 'padding-top', 'padding-bottom',
+                      'float'],
+          'border-matters' : ['border', 'border-left', 'border-right', 'border-radius',
+                    'border-top', 'border-right', 'border-color'],
+        },
+        'elementGroups' : {
+          # N.B. UPPERCASE tags
+          'font-matters' : ['DIV', 'BLOCKQUOTE', 'SPAN', 'STRONG', 'EM', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'],
+          'text-matters' : ['SPAN', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'],
+          'display-matters' : ['HR', 'PRE', 'SPAN', 'UL', 'OL', 'LI', 'PRE', 'CODE'],
+          'size-matters' : ['SPAN'],
+          'color-matters' : ['DIV', 'SPAN', 'PRE', 'CODE', 'BLOCKQUOTE', 'HR'],
+          'position-matters' : ['DIV', 'PRE', 'BLOCKQUOTE', 'SPAN', 'HR', 'UL', 'OL', 'LI', 'P',
+                      'H1', 'H2', 'H3', 'H4', 'H5', 'H6'],
+          'border-matters' : ['HR', 'BLOCKQUOTE', 'SPAN', 'PRE', 'CODE'],
+        }
       }
-    }
-    jq_html_div.inlineStyler(inline_styler_option)
+      jq_html_div.inlineStyler(inline_styler_option)
 
-    # set href to start with 'http' is no protocol assigned
-    jq_html_div.find('a').attr 'href', (i, href) ->
-      if not href.toLowerCase().match('(^http)|(^https)|(^file)')
-        return 'http://' + href
-      else
-        return href
+      # set href to start with 'http' is no protocol assigned
+      jq_html_div.find('a').attr 'href', (i, href) ->
+        if not href.toLowerCase().match('(^http)|(^https)|(^file)')
+          return 'http://' + href
+        else
+          return href
 
-    # clean the html tags/attributes
-    html_clean_option = {
-      format: true,
-      allowedTags: ['a', 'abbr', 'acronym', 'address', 'area', 'b', 'bdo', 'big', 'blockquote',
-              'br', 'caption', 'center', 'cite', 'code', 'col', 'colgroup', 'dd', 'del',
-              'dfn', 'div', 'dl', 'dt', 'em', 'font', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-              'hr', 'i', 'img', 'ins', 'kbd', 'li', 'map', 'ol', 'p', 'pre', 'q', 's',
-              'samp', 'small', 'span', 'strike', 'strong', 'sub', 'sup', 'table', 'tbody',
-              'td', 'tfoot', 'th', 'thead', 'title', 'tr', 'tt', 'u', 'ul', 'var', 'xmp',],
-      allowedAttributes: [['href', ['a']], ['longdesc'], ['style']],
-      removeAttrs: ['id', 'class', 'onclick', 'ondblclick', 'accesskey', 'data', 'dynsrc', 'tabindex',],
-    }
-    cleaned_html = $.htmlClean(jq_html_div.html(), html_clean_option);
-    # FIXME hack for strange class attr not removed
-    cleaned_html = cleaned_html.replace(/class='[^']*'/g, '')
-    cleaned_html = cleaned_html.replace(/class="[^"]*"/g, '')
+      # clean the html tags/attributes
+      html_clean_option = {
+        format: true,
+        allowedTags: ['a', 'abbr', 'acronym', 'address', 'area', 'b', 'bdo', 'big', 'blockquote',
+                'br', 'caption', 'center', 'cite', 'code', 'col', 'colgroup', 'dd', 'del',
+                'dfn', 'div', 'dl', 'dt', 'em', 'font', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                'hr', 'i', 'img', 'ins', 'kbd', 'li', 'map', 'ol', 'p', 'pre', 'q', 's',
+                'samp', 'small', 'span', 'strike', 'strong', 'sub', 'sup', 'table', 'tbody',
+                'td', 'tfoot', 'th', 'thead', 'title', 'tr', 'tt', 'u', 'ul', 'var', 'xmp',],
+        allowedAttributes: [['href', ['a']], ['longdesc'], ['style']],
+        removeAttrs: ['id', 'class', 'onclick', 'ondblclick', 'accesskey', 'data', 'dynsrc', 'tabindex',],
+      }
+      cleaned_html = $.htmlClean(jq_html_div.html(), html_clean_option);
+      # FIXME hack for strange class attr not removed
+      cleaned_html = cleaned_html.replace(/class='[^']*'/g, '')
+      cleaned_html = cleaned_html.replace(/class="[^"]*"/g, '')
 
-    # embbed raw markdown content into the html
-    cleaned_html = cleaned_html +
-      '<center style="display:none">' +
-      $('<div />').text(markdown).html() +
-      '</center>'
+      # embbed raw markdown content into the html
+      cleaned_html = cleaned_html +
+        '<center style="display:none">' +
+        $('<div />').text(markdown).html() +
+        '</center>'
 
-    # add XML header & wrap with <en-note></en-note>
-    final_note_xml = '<?xml version="1.0" encoding="utf-8"?>' +
-             '<!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">' +
-             '<en-note>' +
-             cleaned_html +
-             '</en-note>'
-    # FIXME debugging info
-    console.log(final_note_xml)
-    return final_note_xml
+      # add XML header & wrap with <en-note></en-note>
+      final_note_xml = '<?xml version="1.0" encoding="utf-8"?>' +
+               '<!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">' +
+               '<en-note>' +
+               cleaned_html +
+               '</en-note>'
+
+      # make title
+      title = 'New Note - Markever'
+      if jq_html_div.find('h1').size() > 0
+        text = jq_html_div.find('h1').text()
+        title = text if text.trim().length > 0
+      else if jq_html_div.find('h2').size() > 0
+        text = jq_html_div.find('h2').text()
+        title = text if text.trim().length > 0
+      else if jq_html_div.find('h3').size() > 0
+        text = jq_html_div.find('h3').text()
+        title = text if text.trim().length > 0
+      else if jq_html_div.find('p').size() > 0
+        text = jq_html_div.find('p').text()
+        title = text if text.trim().length > 0
+
+      # the return value of result promise
+      return {enml: final_note_xml, title: title}
+
+
+  get_title_promise = (jq_html_div, html_render_func) ->
+    return html_render_func(jq_html_div).then () =>
+      title = 'New Note - Markever'
+      if jq_html_div.find('h1').size() > 0
+        text = jq_html_div.find('h1').text()
+        title = text if text.trim().length > 0
+      else if jq_html_div.find('h2').size() > 0
+        text = jq_html_div.find('h2').text()
+        title = text if text.trim().length > 0
+      else if jq_html_div.find('h3').size() > 0
+        text = jq_html_div.find('h3').text()
+        title = text if text.trim().length > 0
+      else if jq_html_div.find('p').size() > 0
+        text = jq_html_div.find('p').text()
+        title = text if text.trim().length > 0
+      return title
+
 
   return {
-    getEnmlFromElement : getEnmlFromElement
+    get_enml_and_title_promise : get_enml_and_title_promise
+    get_title_promise: get_title_promise
   }
 ]
 
