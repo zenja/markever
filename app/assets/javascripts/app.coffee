@@ -171,20 +171,31 @@ markever.controller 'EditorController',
   # markdown render functions
   # ------------------------------------------------------------------------------------------------------------------
   vm.render_html = (jq_html_div) ->
-    jq_html_div.html($window.marked(vm.get_md(), {sanitize: true}))
-    vm.html_post_process(jq_html_div)
+    processed_md = vm.md_pre_process(vm.get_md())
+    _html_dom = $('<div></div>')
+    _html_dom.html($window.marked(processed_md, {sanitize: true}))
+    vm.html_post_process(_html_dom).then () ->
+      jq_html_div.empty()
+      jq_html_div.append(_html_dom)
 
-  vm.html_post_process = (jq_html_div) ->
-    # code highliting
-    jq_html_div.find('pre code').each (i, block) ->
+  vm.md_pre_process = (md) ->
+    # TODO more handling
+    processed_md = md
+    return processed_md
+
+  # return promise
+  vm.html_post_process = (jq_tmp_div) ->
+    # code highlighting
+    jq_tmp_div.find('pre code').each (i, block) ->
       hljs.highlightBlock(block)
-    # render Latax
-    MathJax.Hub.Queue(['Typeset', MathJax.Hub, jq_html_div.get(0)])
+    # render Latex
+    MathJax.Hub.Queue(['Typeset', MathJax.Hub, jq_tmp_div.get(0)])
     # change img src to real data url
-    jq_html_div.find('img[src]').each (index) ->
+    must_finish_promise_list = []
+    jq_tmp_div.find('img[src]').each (index) ->
       $img = $(this)
       uuid = $img.attr('src')
-      imageManager.find_image_by_uuid(uuid).then(
+      p = imageManager.find_image_by_uuid(uuid).then(
         (image) =>
           if image?
             console.log('change img src from ' + uuid + ' to its base64 content')
@@ -193,6 +204,8 @@ markever.controller 'EditorController',
         (error) =>
           alert('vm.html_post_process() failed due to failure in imageManager.find_image_by_uuid(' + uuid + ')')
       )
+      must_finish_promise_list.push(p)
+    return Promise.all(must_finish_promise_list).then () -> return jq_tmp_div
 
   # ------------------------------------------------------------------------------------------------------------------
   # Operations for notes
@@ -491,9 +504,6 @@ markever.factory 'enmlRenderer', ['imageManager', (imageManager) ->
     # further post process
     # remove all script tags
     jq_html_div.find('script').remove()
-
-    # set src of img to full data url
-    jq_html_div.find('img[src]').attr 'src', (i, src) ->
 
     # add inline style
     # refer: https://github.com/Karl33to/jquery.inlineStyler
