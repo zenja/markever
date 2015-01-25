@@ -396,37 +396,18 @@ markever.controller 'EditorController',
   vm.close_loading_modal = ->
     $('#loading-modal').modal('hide')
 
-  # ------------------------------------------------------------------------------------------------------------------
-  # sync current note to remote
-  # ------------------------------------------------------------------------------------------------------------------
-  vm.save_note = ->
+  vm.sync_up_all_notes = ->
+    console.log('enter sync_up_all_notes()')
     if vm.saving_note == false
-      # set status
       vm.saving_note = true
-      # get enml and title FIXME get_enml_and_title_from_md() returns a promise!
-      _enml_and_title = vm.get_enml_and_title_from_md(vm.get_md())
-      enml = _enml_and_title['enml']
-      title = _enml_and_title['title']
-      vm.set_title(title)
-      # invoke the api
-      # TODO handle error
-      apiClient.notes.save({
-          guid: vm.get_guid()
-          title: vm.get_title()
-          enml: enml,
-        }).$promise.then(
-          (data) ->
-            # update guid
-            vm.set_guid(data.note.guid)
-            # set status back
-            vm.saving_note = false
-            alert('create/update note succeed: \n' + JSON.stringify(data))
-          (error) ->
-            # set status back
-            vm.saving_note = false
-            alert('create note failed: \n' + JSON.stringify(error))
-            console.log(JSON.stringify(error))
-        )
+      noteManager.sync_up_all_notes($('#md_html_div_hidden'), vm.reload_local_note_list).then(
+        () =>
+          alert('sync_up_all_notes() succeeded for all notes!')
+          vm.saving_note = false
+        (error) =>
+          alert('sync_up_all_notes() failed: ' + error)
+          vm.saving_note = false
+      )
 
   # fixme for debug
   vm.note_manager = noteManager
@@ -763,8 +744,8 @@ markever.factory 'imageManager', ['uuid2', 'dbProvider', (uuid2, dbProvider) -> 
 # Service: noteManager
 # ----------------------------------------------------------------------------------------------------------------------
 markever.factory 'noteManager',
-['uuid2', 'dbProvider', 'apiClient', 'imageManager',
-(uuid2, dbProvider, apiClient, imageManager) -> new class NoteManager
+['uuid2', 'dbProvider', 'apiClient', 'imageManager', 'enmlRenderer',
+(uuid2, dbProvider, apiClient, imageManager, enmlRenderer) -> new class NoteManager
 
   # Status of a note:
   # 1. new: note with a generated guid, not attached to remote
@@ -922,6 +903,59 @@ markever.factory 'noteManager',
         console.log('is NOT Promise!!')
     return Promise.all(must_finish_promise_list)
 
+  # Params:
+  #   jq_div: jQuery div element for rendering
+  #   one_note_synced_func: function called whenever a note is successfully synced up
+  sync_up_all_notes: (jq_div, one_note_synced_func) =>
+    p = @get_all_notes().then (notes) =>
+      _must_finish_promise_list = []
+      for note in notes
+        guid = note.guid
+        md = note.md
+
+        if note.status == @NOTE_STATUS.NEW || note.status == @NOTE_STATUS.MODIFIED
+          is_new_note = (note.status == @NOTE_STATUS.NEW)
+          console.log('note ' + guid + ' sent for sync up')
+          _p = @sync_up_note(is_new_note, guid, jq_div, md).then(
+            () =>
+              console.log('sync up note ' + guid + ' succeeded')
+              one_note_synced_func()
+            (error) =>
+              alert('sync up note ' + guid + ' failed: ' + JSON.stringify(error))
+          )
+          _must_finish_promise_list.push(_p)
+      return Promise.all(_must_finish_promise_list)
+
+    return p.catch (error) =>
+      alert('sync_up_all_notes() failed: ' + error)
+
+  sync_up_note: (is_new_note, guid, jq_div, md) =>
+    console.log('enter sync_up_note() for note ' + guid)
+    return enmlRenderer.get_enml_and_title_promise(jq_div, md).then (enml_and_title) =>
+      _post_data = {
+        title: enml_and_title.title
+        enml: enml_and_title.enml
+      }
+      if is_new_note
+        _post_data['guid'] = ''
+      else
+        _post_data['guid'] = guid
+      return apiClient.notes.save(_post_data).$promise.then(
+        (data) =>
+          # change note status to SYNCED_ALL, using old guid
+          p = @update_note({guid: guid, status: @NOTE_STATUS.SYNCED_ALL}).then () =>
+            # then update guid if is new note (when saving new note, tmp guid will be updated to real one)
+            if is_new_note
+              new_guid = data.note.guid
+              return @update_note_guid(guid, new_guid)
+          return p
+          console.log('sync_up_note(' + guid + ') succeed')
+        (error) =>
+          # set status back
+          alert('sync_up_note() failed: \n' + JSON.stringify(error))
+          throw error
+      )
+
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| DB Operations >
 
   # db server safe. will get db server itself
@@ -1032,9 +1066,12 @@ markever.factory 'noteManager',
   # return: promise
   # ------------------------------------------------------------
   update_note: (note) =>
+    console.log('update_note(' + note.guid + ') invoking')
     if note.guid? == false
       alert('update_note(): note to be updated must have a guid!')
-    console.log('update_note(' + note.guid + ') invoking')
+      return new Promise (resolve, reject) =>
+        reject(new Error('update_note(): note to be updated must have a guid!'))
+
     # register resource data into ImageManager
     if note.resources?
       for r in note.resources
@@ -1059,6 +1096,23 @@ markever.factory 'noteManager',
         return @find_note_by_guid(note.guid)
       (error) =>
         alert('update note ' + note.guid + ' failed!')
+    )
+
+  update_note_guid: (old_guid, new_guid) =>
+    p = @find_note_by_guid(old_guid).then (note) =>
+      if note?
+        _modify_p = dbProvider.get_db_server_promise().then (server) =>
+          _note_modify = {guid: new_guid}
+          return server.notes.query().filter('guid', old_guid).modify(_note_modify).execute()
+        return _modify_p
+      else
+        console.log('update note guid ' + old_guid + ' to new guid ' + new_guid + ' missed!')
+    return p.then(
+      () =>
+        console.log('update note guid ' + old_guid + ' to new guid ' + new_guid + ' succeed')
+        return @find_note_by_guid(new_guid)
+      (error) =>
+        alert('update note guid ' + old_guid + ' to new guid ' + new_guid + ' failed: ' + error)
     )
 
   # ------------------------------------------------------------
