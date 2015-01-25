@@ -61,15 +61,6 @@ markever.controller 'EditorController',
       vm.set_note_list(notes)
     p.catch (error) -> alert('reload_local_note_list() failed')
 
-  vm.get_enml_and_title_from_md = (md) ->
-    html_div_hidden = $('#md_html_div_hidden')
-    # return a promise
-    return enmlRenderer.get_enml_and_title_promise(
-      html_div_hidden,
-      vm.render_html,
-      md
-    )
-
   # ------------------------------------------------------------------------------------------------------------------
   # Debugging methods
   # ------------------------------------------------------------------------------------------------------------------
@@ -121,12 +112,14 @@ markever.controller 'EditorController',
         console.log('no valid previous current note found. create new note')
         noteManager.make_new_note().then(
           (note) =>
-            vm.change_current_note(guid=note.guid, title=note.title, md=note.md)
+            vm.change_current_note(note.guid, note.title, note.md)
             console.log('New note made: ' + JSON.stringify(note))
           (error) =>
-            alert('make_new_note() failed!')
-        ).catch (error) => alert('make new note failed!')
-    p.catch (error) => alert('load previous current note failed')
+            alert('make_new_note() failed: ' + error)
+        ).catch (error) =>
+          trace = printStackTrace({e: error})
+          alert('Error, make new note failed!\n' + 'Message: ' + error.message + '\nStack trace:\n' + trace.join('\n'))
+    p.catch (error) => alert('load previous current note failed: ' + error)
 
     # get note list
     vm.refresh_all_notes()
@@ -152,47 +145,7 @@ markever.controller 'EditorController',
     # set markdown (single direction updating)
     vm.set_md(vm.ace_editor.getValue())
     # TODO optimize performance
-    vm.render_html($('#md_html_div'))
-
-  # ------------------------------------------------------------------------------------------------------------------
-  # markdown render functions
-  # ------------------------------------------------------------------------------------------------------------------
-  vm.render_html = (jq_html_div) ->
-    processed_md = vm.md_pre_process(vm.get_md())
-    _html_dom = $('<div></div>')
-    _html_dom.html($window.marked(processed_md, {sanitize: true}))
-    return vm.html_post_process(_html_dom).then () ->
-      jq_html_div.empty()
-      jq_html_div.append(_html_dom)
-
-  vm.md_pre_process = (md) ->
-    # TODO more handling
-    processed_md = md
-    return processed_md
-
-  # return promise
-  vm.html_post_process = (jq_tmp_div) ->
-    # code highlighting
-    jq_tmp_div.find('pre code').each (i, block) ->
-      hljs.highlightBlock(block)
-    # render Latex
-    MathJax.Hub.Queue(['Typeset', MathJax.Hub, jq_tmp_div.get(0)])
-    # change img src to real data url
-    must_finish_promise_list = []
-    jq_tmp_div.find('img[src]').each (index) ->
-      $img = $(this)
-      uuid = $img.attr('src')
-      p = imageManager.find_image_by_uuid(uuid).then(
-        (image) =>
-          if image?
-            console.log('change img src from ' + uuid + ' to its base64 content')
-            $img.attr('longdesc', uuid)
-            $img.attr('src', image.content)
-        (error) =>
-          alert('vm.html_post_process() failed due to failure in imageManager.find_image_by_uuid(' + uuid + ')')
-      )
-      must_finish_promise_list.push(p)
-    return Promise.all(must_finish_promise_list).then () -> return jq_tmp_div
+    enmlRenderer.render_html($('#md_html_div'), vm.get_md()).catch (error) => alert('render error: ' + error)
 
   # ------------------------------------------------------------------------------------------------------------------
   # Operations for notes
@@ -203,7 +156,7 @@ markever.controller 'EditorController',
     vm.set_title(title) if title?
     vm.set_md_and_update_editor(md) if md?
     # render html
-    vm.render_html($('#md_html_div'))
+    enmlRenderer.render_html($('#md_html_div'), vm.get_md())
     # save current note guid to local storage
     localStorageService.set(vm.SETTINGS_KEY.CURRENT_NOTE_GUID, guid)
 
@@ -229,7 +182,7 @@ markever.controller 'EditorController',
           note.status == noteManager.NOTE_STATUS.MODIFIED)
             # note in db -> current note
             console.log('loading note ' + note.guid + ' with status ' + note.status + ' from local DB')
-            vm.change_current_note(guid=note.guid, title=note.title, md=note.md)
+            vm.change_current_note(note.guid, note.title, note.md)
             vm.close_loading_modal()
             console.log('loading note ' + note.guid + ' finished')
         if (note? == false) or (note.status == noteManager.NOTE_STATUS.SYNCED_META)
@@ -237,7 +190,7 @@ markever.controller 'EditorController',
           noteManager.fetch_remote_note(guid).then(
             (note) ->
               console.log('loading note ' + note.guid + ' with status ' + note.status + ' from remote')
-              vm.change_current_note(guid=note.guid, title=note.title, md=note.md)
+              vm.change_current_note(note.guid, note.title, note.md)
               vm.close_loading_modal()
               console.log('loading note ' + note.guid + ' finished')
               # updating note list
@@ -258,7 +211,7 @@ markever.controller 'EditorController',
   vm.save_current_note_to_db = () ->
     if vm.is_note_dirty()
       console.log('current note is dirty, saving to db...')
-      enmlRenderer.get_title_promise($('#md_html_div_hidden'), vm.render_html).then (title) =>
+      enmlRenderer.get_title_promise($('#md_html_div_hidden'), vm.get_md()).then (title) =>
         note_info =
           guid: vm.get_guid()
           title: title
@@ -483,10 +436,51 @@ markever.controller 'EditorController',
 # ----------------------------------------------------------------------------------------------------------------------
 # Service: enmlRenderer
 # ----------------------------------------------------------------------------------------------------------------------
-markever.factory 'enmlRenderer', ['imageManager', (imageManager) ->
-  get_enml_and_title_promise = (jq_html_div, html_render_func, markdown) ->
-    # html_render_func has to be a promise
-    return html_render_func(jq_html_div).then () =>
+markever.factory 'enmlRenderer', ['$window', 'imageManager', ($window, imageManager) ->
+  render_html = (jq_html_div, md) ->
+    processed_md = _md_pre_process(md)
+    _html_dom = $('<div></div>')
+    _html_dom.html($window.marked(processed_md, {sanitize: true}))
+    return _html_post_process(_html_dom).then(
+      () ->
+        jq_html_div.empty()
+        jq_html_div.append(_html_dom)
+      (error) ->
+        alert('render_html() error: ' + error)
+    )
+
+  _md_pre_process = (md) ->
+    # TODO more handling
+    processed_md = md
+    return processed_md
+
+  # return promise
+  _html_post_process = (jq_tmp_div) ->
+    # code highlighting
+    jq_tmp_div.find('pre code').each (i, block) ->
+      hljs.highlightBlock(block)
+    # render Latex
+    $window.MathJax.Hub.Queue(['Typeset', $window.MathJax.Hub, jq_tmp_div.get(0)])
+    # change img src to real data url
+    must_finish_promise_list = []
+    jq_tmp_div.find('img[src]').each (index) ->
+      $img = $(this)
+      uuid = $img.attr('src')
+      p = imageManager.find_image_by_uuid(uuid).then(
+        (image) =>
+          if image?
+            console.log('change img src from ' + uuid + ' to its base64 content')
+            $img.attr('longdesc', uuid)
+            $img.attr('src', image.content)
+        (error) =>
+          alert('_html_post_process() failed due to failure in imageManager.find_image_by_uuid(' + uuid + '): ' + error)
+      )
+      must_finish_promise_list.push(p.catch (error) -> alert('image replace failed: ' + error))
+    return Promise.all(must_finish_promise_list).then () -> return jq_tmp_div
+
+
+  get_enml_and_title_promise = (jq_html_div, markdown) ->
+    return render_html(jq_html_div, markdown).then () =>
       # further post process
       # remove all script tags
       jq_html_div.find('script').remove()
@@ -578,8 +572,8 @@ markever.factory 'enmlRenderer', ['imageManager', (imageManager) ->
       return {enml: final_note_xml, title: title}
 
 
-  get_title_promise = (jq_html_div, html_render_func) ->
-    return html_render_func(jq_html_div).then () =>
+  get_title_promise = (jq_html_div, markdown) ->
+    return render_html(jq_html_div, markdown).then () =>
       title = 'New Note - Markever'
       if jq_html_div.find('h1').size() > 0
         text = jq_html_div.find('h1').text()
@@ -599,6 +593,7 @@ markever.factory 'enmlRenderer', ['imageManager', (imageManager) ->
   return {
     get_enml_and_title_promise : get_enml_and_title_promise
     get_title_promise: get_title_promise
+    render_html: render_html
   }
 ]
 
