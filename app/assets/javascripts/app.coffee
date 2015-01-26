@@ -146,6 +146,13 @@ markever.controller 'EditorController',
     vm.set_md(vm.ace_editor.getValue())
     # TODO optimize performance
     enmlRenderer.render_html($('#md_html_div'), vm.get_md()).catch (error) => alert('render error: ' + error)
+    # change note status to MODIFIED if original status is SYNCED_ALL
+    p = noteManager.find_note_by_guid(vm.get_guid()).then (note) =>
+      if note? && note.status == noteManager.NOTE_STATUS.SYNCED_ALL
+        return noteManager.update_note({guid: note.guid, status: noteManager.NOTE_STATUS.MODIFIED})
+    p.then(
+      console.log('current note status set to MODIFIED')
+    ).catch (error) => alert('set current note status to MODIFIED failed')
 
   # ------------------------------------------------------------------------------------------------------------------
   # Operations for notes
