@@ -407,7 +407,10 @@ markever.controller 'EditorController',
     console.log('enter sync_up_all_notes()')
     if vm.saving_note == false
       vm.saving_note = true
-      noteManager.sync_up_all_notes($('#md_html_div_hidden'), vm.reload_local_note_list).then(
+      note_synced_callback = (old_guid, new_guid) ->
+        vm.reload_local_note_list()
+        localStorageService.set(vm.SETTINGS_KEY.CURRENT_NOTE_GUID, new_guid)
+      noteManager.sync_up_all_notes($('#md_html_div_hidden'), note_synced_callback).then(
         () =>
           alert('sync_up_all_notes() succeeded for all notes!')
           vm.saving_note = false
@@ -913,7 +916,7 @@ markever.factory 'noteManager',
   # Params:
   #   jq_div: jQuery div element for rendering
   #   one_note_synced_func: function called whenever a note is successfully synced up
-  sync_up_all_notes: (jq_div, one_note_synced_func) =>
+  sync_up_all_notes: (jq_div, one_note_synced_callback) =>
     p = @get_all_notes().then (notes) =>
       _must_finish_promise_list = []
       for note in notes
@@ -924,9 +927,9 @@ markever.factory 'noteManager',
           is_new_note = (note.status == @NOTE_STATUS.NEW)
           console.log('note ' + guid + ' sent for sync up')
           _p = @sync_up_note(is_new_note, guid, jq_div, md).then(
-            () =>
+            (synced_note) =>
               console.log('sync up note ' + guid + ' succeeded')
-              one_note_synced_func()
+              one_note_synced_callback(guid, synced_note.guid)
             (error) =>
               alert('sync up note ' + guid + ' failed: ' + JSON.stringify(error))
           )
@@ -954,6 +957,7 @@ markever.factory 'noteManager',
             # then update guid if is new note (when saving new note, tmp guid will be updated to real one)
             if is_new_note
               new_guid = data.note.guid
+              # @update_note_guid will return Promise containing the updated note
               return @update_note_guid(guid, new_guid)
           return p
           console.log('sync_up_note(' + guid + ') succeed')
@@ -1105,6 +1109,7 @@ markever.factory 'noteManager',
         alert('update note ' + note.guid + ' failed!')
     )
 
+  # return promise containing the updated note
   update_note_guid: (old_guid, new_guid) =>
     p = @find_note_by_guid(old_guid).then (note) =>
       if note?
