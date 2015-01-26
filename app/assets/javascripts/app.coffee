@@ -409,7 +409,8 @@ markever.controller 'EditorController',
       vm.saving_note = true
       note_synced_callback = (old_guid, new_guid) ->
         vm.reload_local_note_list()
-        localStorageService.set(vm.SETTINGS_KEY.CURRENT_NOTE_GUID, new_guid)
+        if old_guid? && new_guid? && old_guid != new_guid
+          localStorageService.set(vm.SETTINGS_KEY.CURRENT_NOTE_GUID, new_guid)
       noteManager.sync_up_all_notes($('#md_html_div_hidden'), note_synced_callback).then(
         () =>
           alert('sync_up_all_notes() succeeded for all notes!')
@@ -937,8 +938,10 @@ markever.factory 'noteManager',
       return Promise.all(_must_finish_promise_list)
 
     return p.catch (error) =>
-      alert('sync_up_all_notes() failed: ' + error)
+      trace = printStackTrace({e: error})
+      alert('sync_up_all_notes() failed\n' + 'Message: ' + error.message + '\nStack trace:\n' + trace.join('\n'))
 
+  # return Promise containing the synced note
   sync_up_note: (is_new_note, guid, jq_div, md) =>
     console.log('enter sync_up_note() for note ' + guid)
     return enmlRenderer.get_enml_and_title_promise(jq_div, md).then (enml_and_title) =>
@@ -959,6 +962,8 @@ markever.factory 'noteManager',
               new_guid = data.note.guid
               # @update_note_guid will return Promise containing the updated note
               return @update_note_guid(guid, new_guid)
+            else
+              return @find_note_by_guid(guid)
           return p
           console.log('sync_up_note(' + guid + ') succeed')
         (error) =>
