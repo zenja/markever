@@ -10,56 +10,9 @@ markever.controller 'EditorController',
   vm = this
 
   # ------------------------------------------------------------------------------------------------------------------
-  # Models for notes
+  # Model for note list
   # ------------------------------------------------------------------------------------------------------------------
-  # current note
-  vm.note =
-    guid: ""
-    title: ""
-    _markdown: ""
-    _is_dirty: false
-
-  vm.get_guid = ->
-    return vm.note.guid
-
-  vm.set_guid = (guid) ->
-    vm.note.guid = guid
-
-  vm.get_title = ->
-    return vm.note.title
-
-  vm.set_title = (title) ->
-    vm.note.title = title
-
-  # markdown should only be get from this getter
-  vm.get_md = ->
-    return vm.note._markdown
-
-  vm.set_md = (md) ->
-    vm.note._markdown = md
-    vm.set_note_dirty(true)
-
-  vm.set_md_and_update_editor = (md) ->
-    vm.set_md(md)
-    vm.ace_editor.setValue(md)
-
-  vm.is_note_dirty = () ->
-    return vm.note._is_dirty
-
-  vm.set_note_dirty = (is_dirty) ->
-    vm.note._is_dirty = is_dirty
-
-  # note lists containing only title and guid
-  vm._all_notes = []
-
-  vm.set_note_list = (note_arr) ->
-    vm._all_notes = note_arr
-    console.log('note list updated')
-
-  vm.reload_local_note_list = () ->
-    p = noteManager.get_all_notes().then (notes) ->
-      vm.set_note_list(notes)
-    p.catch (error) -> alert('reload_local_note_list() failed')
+  vm.note_list = []
 
   # ------------------------------------------------------------------------------------------------------------------
   # Debugging methods
@@ -98,31 +51,10 @@ markever.controller 'EditorController',
     # sync scroll
     scrollSyncor.syncScroll(vm.ace_editor, $('#md_html_div'))
 
-    # get previous note guid from local storage,
-    # if exists such note, load it,
-    # else make new note
-    previous_note_guid = localStorageService.get(vm.SETTINGS_KEY.CURRENT_NOTE_GUID)
-    if previous_note_guid? == false
-      previous_note_guid = "INVALID_GUID"
-    p = noteManager.find_note_by_guid(previous_note_guid).then (note) =>
-      if note?
-        console.log('got valid previous current note ' + previous_note_guid + '. load...')
-        vm.load_note(note.guid)
-      else
-        console.log('no valid previous current note found. create new note')
-        noteManager.make_new_note().then(
-          (note) =>
-            vm.change_current_note(note.guid, note.title, note.md)
-            console.log('New note made: ' + JSON.stringify(note))
-          (error) =>
-            alert('make_new_note() failed: ' + error)
-        ).catch (error) =>
-          trace = printStackTrace({e: error})
-          alert('Error, make new note failed!\n' + 'Message: ' + error.message + '\nStack trace:\n' + trace.join('\n'))
-    p.catch (error) => alert('load previous current note failed: ' + error)
+    noteManager.init_current_note()
 
     # get note list
-    vm.refresh_all_notes()
+    noteManager.fetch_note_list()
 
     # take effect the settings
     vm.set_keyboard_handler(vm.current_keyboard_handler)
@@ -132,9 +64,6 @@ markever.controller 'EditorController',
     # reset app status
     vm.reset_status()
 
-    # save current note to db periodically
-    $interval(vm.save_current_note_to_db, 1000)
-
     # all ready
     vm.all_ready = true
 
@@ -142,96 +71,51 @@ markever.controller 'EditorController',
   # ace editor event handlers
   # ------------------------------------------------------------------------------------------------------------------
   vm.editor_content_changed = (event) ->
-    # set markdown (single direction updating)
-    vm.set_md(vm.ace_editor.getValue())
-    # TODO optimize performance
-    enmlRenderer.render_html($('#md_html_div'), vm.get_md()).catch (error) => alert('render error: ' + error)
-    # change note status to MODIFIED if original status is SYNCED_ALL
-    p = noteManager.find_note_by_guid(vm.get_guid()).then (note) =>
-      if note? && note.status == noteManager.NOTE_STATUS.SYNCED_ALL
-        return noteManager.update_note({guid: note.guid, status: noteManager.NOTE_STATUS.MODIFIED})
-    p.then(
-      console.log('current note status set to MODIFIED')
-    ).catch (error) => alert('set current note status to MODIFIED failed')
+    # render html, since noteManager will not notify back if use editor_content_changed(...)
+    enmlRenderer.render_html($('#md_html_div'), vm.ace_editor.getValue())
+    noteManager.editor_content_changed(vm.ace_editor.getValue())
 
   # ------------------------------------------------------------------------------------------------------------------
   # Operations for notes
   # ------------------------------------------------------------------------------------------------------------------
-  vm.change_current_note = (guid, title, md) ->
-    vm.set_guid(guid) if guid?
-    # FIXME generate title from md
-    vm.set_title(title) if title?
-    vm.set_md_and_update_editor(md) if md?
-    # render html
-    enmlRenderer.render_html($('#md_html_div'), vm.get_md())
-    # save current note guid to local storage
-    localStorageService.set(vm.SETTINGS_KEY.CURRENT_NOTE_GUID, guid)
-
-  # TODO prevent multiple duplicated requests
-  vm.refresh_all_notes = ->
-    # TODO handle failure
-    noteManager.load_remote_notes().then(
-      (notes) ->
-        console.log('load_remote_notes() result: ' + JSON.stringify(notes))
-        vm.set_note_list(notes)
-      (error) ->
-        alert('load_remote_notes() failed: ' + JSON.stringify(error))
-    )
-
   vm.load_note = (guid) ->
-    # check if the note to be loaded is already current note
-    if guid != vm.get_guid()
+    if guid != noteManager.get_current_note_guid()
       vm.open_loading_modal()
-      p = noteManager.find_note_by_guid(guid).then (note) =>
-        if note? and
-          (note.status == noteManager.NOTE_STATUS.NEW or
-          note.status == noteManager.NOTE_STATUS.SYNCED_ALL or
-          note.status == noteManager.NOTE_STATUS.MODIFIED)
-            # note in db -> current note
-            console.log('loading note ' + note.guid + ' with status ' + note.status + ' from local DB')
-            vm.change_current_note(note.guid, note.title, note.md)
-            vm.close_loading_modal()
-            console.log('loading note ' + note.guid + ' finished')
-        if (note? == false) or (note.status == noteManager.NOTE_STATUS.SYNCED_META)
-          # remote note -> current note
-          noteManager.fetch_remote_note(guid).then(
-            (note) ->
-              console.log('loading note ' + note.guid + ' with status ' + note.status + ' from remote')
-              vm.change_current_note(note.guid, note.title, note.md)
-              vm.close_loading_modal()
-              console.log('loading note ' + note.guid + ' finished')
-              # updating note list
-              noteManager.get_all_notes().then(
-                (notes) ->
-                  console.log('updating note lists')
-                  vm.set_note_list(notes)
-                (error) ->
-                  alert('get_all_notes() failed in load_note()')
-              )
-            (error) ->
-              alert('load note ' + guid + ' failed: ' + JSON.stringify(error))
-              vm.close_loading_modal()
-          )
-      p.catch (error) =>
-        alert('find_note_by_guid() itself or then() failed in load_note(): ' + JSON.stringify(error))
+      noteManager.load_note(guid)
 
-  vm.save_current_note_to_db = () ->
-    if vm.is_note_dirty()
-      console.log('current note is dirty, saving to db...')
-      enmlRenderer.get_title_promise($('#md_html_div_hidden'), vm.get_md()).then (title) =>
-        note_info =
-          guid: vm.get_guid()
-          title: title
-          md: vm.get_md()
-        noteManager.update_note(note_info).then(
-          (note) ->
-            console.log('dirty note successfully saved to db: ' + JSON.stringify(note) + ', set it to not dirty.')
-            # because title may change, we need to reload note list
-            vm.reload_local_note_list()
-            vm.set_note_dirty(false)
-          (error) ->
-            alert('update note failed in save_current_note_to_db(): ' + JSON.stringify(error))
-        ).catch (error) => alert('failed to save current note to db!')
+  vm.sync_up_all_notes = ->
+    if vm.saving_note == false
+      vm.saving_note = true
+      p = noteManager.sync_up_all_notes($('#md_html_div_hidden')).then () =>
+        alert('sync_up_all_notes() succeeded for all notes!')
+        vm.saving_note = false
+      p.catch (error) =>
+          alert('vm.sync_up_all_notes() failed: ' + error)
+          vm.saving_note = false
+
+  # ------------------------------------------------------------------------------------------------------------------
+  # TODO Note Manager Event Handlers
+  # ------------------------------------------------------------------------------------------------------------------
+  noteManager.on_current_note_md_modified (new_md) ->
+    vm.ace_editor.setValue(new_md)
+    enmlRenderer.render_html($('#md_html_div'), new_md).catch (error) => alert('render error: ' + error)
+    console.log('on_current_note_md_modified()')
+
+  noteManager.on_current_note_switched (new_note_guid) ->
+    enmlRenderer.render_html($('#md_html_div'), noteManager.get_current_note_md())
+
+  noteManager.on_note_load_finished (is_success, guid, error) ->
+    vm.close_loading_modal()
+    if is_success
+      console.log('load note ' + guid + ' succeeded')
+    else
+      alert('load note ' + guid + ' failed: ' + error)
+
+  noteManager.on_note_synced (is_success, old_guid, new_guid, error) ->
+
+  noteManager.on_note_list_changed (note_list) ->
+    vm.note_list = note_list
+
 
   # ------------------------------------------------------------------------------------------------------------------
   # App Status
@@ -402,23 +286,6 @@ markever.controller 'EditorController',
 
   vm.close_loading_modal = ->
     $('#loading-modal').modal('hide')
-
-  vm.sync_up_all_notes = ->
-    console.log('enter sync_up_all_notes()')
-    if vm.saving_note == false
-      vm.saving_note = true
-      note_synced_callback = (old_guid, new_guid) ->
-        vm.reload_local_note_list()
-        if old_guid? && new_guid? && old_guid != new_guid
-          localStorageService.set(vm.SETTINGS_KEY.CURRENT_NOTE_GUID, new_guid)
-      noteManager.sync_up_all_notes($('#md_html_div_hidden'), note_synced_callback).then(
-        () =>
-          alert('sync_up_all_notes() succeeded for all notes!')
-          vm.saving_note = false
-        (error) =>
-          alert('sync_up_all_notes() failed: ' + error)
-          vm.saving_note = false
-      )
 
   # fixme for debug
   vm.note_manager = noteManager
@@ -755,9 +622,10 @@ markever.factory 'imageManager', ['uuid2', 'dbProvider', (uuid2, dbProvider) -> 
 # Service: noteManager
 # ----------------------------------------------------------------------------------------------------------------------
 markever.factory 'noteManager',
-['uuid2', 'dbProvider', 'apiClient', 'imageManager', 'enmlRenderer',
-(uuid2, dbProvider, apiClient, imageManager, enmlRenderer) -> new class NoteManager
+['$interval', 'uuid2', 'localStorageService', 'dbProvider', 'apiClient', 'imageManager', 'enmlRenderer',
+($interval, uuid2, localStorageService, dbProvider, apiClient, imageManager, enmlRenderer) -> new class NoteManager
 
+  #---------------------------------------------------------------------------------------------------------------------
   # Status of a note:
   # 1. new: note with a generated guid, not attached to remote
   # 2. synced_meta: note with metadata fetched to remote. not editable
@@ -774,12 +642,278 @@ markever.factory 'noteManager',
   #                  | load note data from remote
   #                  |
   # synced_meta ------
+  #---------------------------------------------------------------------------------------------------------------------
+
+  constructor: ->
+    $interval(@save_current_note_to_db, 1000)
 
   NOTE_STATUS:
     NEW: 0
     SYNCED_META: 1
     SYNCED_ALL: 2
     MODIFIED: 3
+
+  SETTINGS_KEY:
+    CURRENT_NOTE_GUID: 'note_manager.settings.current_note.guid'
+
+
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Current Note >
+
+  current_note:
+    guid: ""
+    title: ""
+    status: null
+    md: ""
+    _is_dirty: false
+
+  # ------------------------------------------------------------
+  # Public accessor for current_note
+  # ------------------------------------------------------------
+
+  get_current_note_guid: =>
+    return @current_note.guid
+
+  get_current_note_title: =>
+    return @current_note.title
+
+  get_current_note_status: =>
+    return @current_note.status
+
+  get_current_note_md: =>
+    return @current_note.md
+
+  # ------------------------------------------------------------
+  # Private accessor for current_note
+  # ------------------------------------------------------------
+
+  _is_current_note_dirty: () =>
+    return @current_note._is_dirty
+
+  _set_current_note_dirty: (is_dirty) =>
+    @current_note._is_dirty = is_dirty
+
+  _switch_current_note: (guid, title, md, status) =>
+    console.log('_switch_current_note(...) invoked')
+    if guid?
+      @_set_current_note_guid(guid)
+      @current_note_switched(guid)
+    if title?
+      @_set_current_note_title(title)
+    if md?
+      if @get_current_note_md() != md
+        @_set_current_note_md(md)
+    if status?
+      @_set_current_note_status(status)
+
+  _set_current_note_guid: (guid) =>
+    @current_note.guid = guid
+
+  _set_current_note_title: (title) =>
+    @current_note.title = title
+
+  _set_current_note_md: (md, notify=true) =>
+    if @get_current_note_md() != md
+      @current_note.md = md
+      if notify
+        @current_note_md_modified(md)
+
+    # change note status to MODIFIED if original status is SYNCED_ALL
+    if @get_current_note_status() == @NOTE_STATUS.SYNCED_ALL
+      @_set_current_note_status(@NOTE_STATUS.MODIFIED)
+
+  _set_current_note_status: (status) =>
+    @current_note.status = status
+    @reload_local_note_list()
+
+  # ------------------------------------------------------------
+  # Other Operations for Current Note
+  # ------------------------------------------------------------
+
+  editor_content_changed: (md) =>
+    if @get_current_note_md() != md
+      # update md w/o notifying, otherwise will make loop
+      @_set_current_note_md(md, false)
+      @_set_current_note_dirty(true)
+
+  save_current_note_to_db: () =>
+    if @_is_current_note_dirty()
+      console.log('current note is dirty, saving to db...')
+      # FIXME remove jq element
+      enmlRenderer.get_title_promise($('#md_html_div_hidden'), @get_current_note_md()).then (title) =>
+        note_info =
+          guid: @get_current_note_guid()
+          title: title
+          md: @get_current_note_md()
+          status: @get_current_note_status()
+        @update_note(note_info).then(
+          (note) =>
+            console.log('dirty note successfully saved to db: ' + JSON.stringify(note) + ', set it to not dirty.')
+            # because title may change, we need to reload note list
+            @reload_local_note_list()
+            @_set_current_note_dirty(false)
+          (error) =>
+            alert('update note failed in save_current_note_to_db(): ' + JSON.stringify(error))
+        ).catch (error) => alert('failed to save current note to db: ' + error)
+
+  # ------------------------------------------------------------
+  # load previous note if exists, otherwise make a new note and set it current note
+  # ------------------------------------------------------------
+  init_current_note: () =>
+    previous_note_guid = localStorageService.get(@SETTINGS_KEY.CURRENT_NOTE_GUID)
+    if previous_note_guid? == false
+      previous_note_guid = "INVALID_GUID"
+    p = @find_note_by_guid(previous_note_guid).then (note) =>
+      if note?
+        console.log('got valid previous current note ' + previous_note_guid + '. load...')
+        @load_note(note.guid)
+      else
+        console.log('no valid previous current note found. create new note')
+        @make_new_note().then(
+          (note) =>
+            @_switch_current_note(note.guid, note.title, note.md, @NOTE_STATUS.NEW)
+            console.log('New note made: ' + JSON.stringify(note))
+          (error) =>
+            alert('make_new_note() failed: ' + error)
+        ).catch (error) =>
+          trace = printStackTrace({e: error})
+          alert('Error, make new note failed!\n' + 'Message: ' + error.message + '\nStack trace:\n' + trace.join('\n'))
+    p.catch (error) => alert('load previous current note failed: ' + error)
+
+  # ------------------------------------------------------------
+  # Load a note by guid as current note
+  #
+  # If note is SYNCED_ALL in local, just load it from local
+  # otherwise fetch the note content from remote
+  #
+  # Return:
+  # ------------------------------------------------------------
+  load_note: (guid) =>
+    # check if the note to be loaded is already current note
+    if guid != @get_current_note_guid()
+      p = @find_note_by_guid(guid).then (note) =>
+        if note? and
+          (note.status == @NOTE_STATUS.NEW or
+          note.status == @NOTE_STATUS.SYNCED_ALL or
+          note.status == @NOTE_STATUS.MODIFIED)
+            # note in db -> current note
+            console.log('loading note ' + note.guid + ' with status ' + note.status + ' from local DB')
+            @_switch_current_note(note.guid, note.title, note.md, note.status)
+            @note_load_finished(true, note.guid, null)
+            console.log('loading note ' + note.guid + ' finished')
+        if (note? == false) or (note.status == @NOTE_STATUS.SYNCED_META)
+          # remote note -> current note
+          @fetch_remote_note(guid).then(
+            (note) =>
+              console.log('loading note ' + note.guid + ' with status ' + note.status + ' from remote')
+              @_switch_current_note(note.guid, note.title, note.md, note.status)
+              @note_load_finished(true, note.guid, null)
+              console.log('loading note ' + note.guid + ' finished')
+              # updating note list
+              @get_all_notes().then(
+                (notes) =>
+                  console.log('updating note lists')
+                  @_set_note_list(notes)
+                (error) =>
+                  alert('get_all_notes() failed in load_note(): ' + error)
+              )
+            (error) =>
+              alert('load note ' + guid + ' failed: ' + JSON.stringify(error))
+              @note_load_finished(false, guid, new Error('load note ' + guid + ' failed: ' + JSON.stringify(error)))
+          )
+      p.catch (error) =>
+        alert('find_note_by_guid() itself or then() failed in load_note(): ' + JSON.stringify(error))
+
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Note List >
+
+  note_list: []
+
+  _set_note_list: (note_list) =>
+    @note_list = note_list
+    @note_list_changed(note_list)
+
+  # i.e. vm.refresh_remote_notes
+  # FIXME: delete previous comment when refactor is done
+  fetch_note_list: =>
+    @load_remote_notes().then(
+      (notes) =>
+        console.log('fetch_note_list() result: ' + JSON.stringify(notes))
+        @_set_note_list(notes)
+      (error) =>
+        alert('fetch_note_list() failed: ' + JSON.stringify(error))
+    )
+
+  reload_local_note_list: () =>
+    p = @get_all_notes().then (notes) =>
+      @_set_note_list(notes)
+    p.catch (error) => alert('reload_local_note_list() failed:' + error)
+
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Event System >
+
+  # ------------------------------------------------------------
+  # Event: current note markdown changed
+  # ------------------------------------------------------------
+  current_note_md_modified_listeners: []
+  on_current_note_md_modified: (listener) =>
+    @current_note_md_modified_listeners.push(listener)
+  current_note_md_modified: (new_md) =>
+    for l in @current_note_md_modified_listeners
+      l(new_md)
+
+  # ------------------------------------------------------------
+  # Event: current note switched to another note
+  # ------------------------------------------------------------
+  current_note_switched_listeners: []
+  on_current_note_switched: (listener) =>
+    @current_note_switched_listeners.push(listener)
+  current_note_switched: (new_note_guid) =>
+    localStorageService.set(@SETTINGS_KEY.CURRENT_NOTE_GUID, new_note_guid)
+
+    for l in @current_note_switched_listeners
+      l(new_note_guid)
+
+  # ------------------------------------------------------------
+  # Event: current note's guid changed (the note is still the "same" note)
+  # ------------------------------------------------------------
+  current_note_guid_modified_listeners: []
+  on_current_note_guid_modified: (listener) =>
+    @current_note_guid_modified_listeners.push(listener)
+  current_note_guid_modified: (old_guid, new_guid) =>
+    localStorageService.set(@SETTINGS_KEY.CURRENT_NOTE_GUID, new_guid)
+
+    for l in @current_note_guid_modified_listeners
+      l(old_guid, new_guid)
+
+  # ------------------------------------------------------------
+  # Event: a note finished synced up
+  # ------------------------------------------------------------
+  note_synced_listeners: []
+  on_note_synced: (listener) =>
+    @note_synced_listeners.push(listener)
+  note_synced: (is_success, old_guid, new_guid, error) =>
+    @reload_local_note_list()
+
+    for l in @note_synced_listeners
+      l(is_success, old_guid, new_guid, error)
+
+  # ------------------------------------------------------------
+  # Event: note list changed
+  # ------------------------------------------------------------
+  note_list_changed_listeners: []
+  on_note_list_changed: (listener) =>
+    @note_list_changed_listeners.push(listener)
+  note_list_changed: (note_list) =>
+    for l in @note_list_changed_listeners
+      l(note_list)
+
+  # ------------------------------------------------------------
+  # Event: a note finished loading (either success or fail)
+  # ------------------------------------------------------------
+  note_load_finished_listeners: []
+  on_note_load_finished: (listener) =>
+    @note_load_finished_listeners.push(listener)
+  note_load_finished: (is_success, guid, error) =>
+    for l in @note_load_finished_listeners
+      l(is_success, guid, error)
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Remote Operations >
 
@@ -917,7 +1051,7 @@ markever.factory 'noteManager',
   # Params:
   #   jq_div: jQuery div element for rendering
   #   one_note_synced_func: function called whenever a note is successfully synced up
-  sync_up_all_notes: (jq_div, one_note_synced_callback) =>
+  sync_up_all_notes: (jq_div) =>
     p = @get_all_notes().then (notes) =>
       _must_finish_promise_list = []
       for note in notes
@@ -930,9 +1064,10 @@ markever.factory 'noteManager',
           _p = @sync_up_note(is_new_note, guid, jq_div, md).then(
             (synced_note) =>
               console.log('sync up note ' + guid + ' succeeded')
-              one_note_synced_callback(guid, synced_note.guid)
+              @note_synced(true, guid, synced_note.guid, null)
             (error) =>
               alert('sync up note ' + guid + ' failed: ' + JSON.stringify(error))
+              @note_synced(false, null, null, error)
           )
           _must_finish_promise_list.push(_p)
       return Promise.all(_must_finish_promise_list)
@@ -1127,6 +1262,9 @@ markever.factory 'noteManager',
     return p.then(
       () =>
         console.log('update note guid ' + old_guid + ' to new guid ' + new_guid + ' succeed')
+        # notify current note guid changed
+        if old_guid == @current_note.guid
+          @current_note_guid_modified(old_guid, new_guid)
         return @find_note_by_guid(new_guid)
       (error) =>
         alert('update note guid ' + old_guid + ' to new guid ' + new_guid + ' failed: ' + error)
