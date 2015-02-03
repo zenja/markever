@@ -499,17 +499,33 @@ markever.factory 'scrollSyncor', ->
 # ----------------------------------------------------------------------------------------------------------------------
 # Service: apiClient
 # ----------------------------------------------------------------------------------------------------------------------
-markever.factory 'apiClient', ['$resource', ($resource) ->
-  Notes = $resource('/api/v1/notes/:id', {id: '@id'}, {
+markever.factory 'apiClient', ['$resource', ($resource) -> new class APIClient
+  note_resource: $resource('/api/v1/notes/:id', {id: '@id'}, {
     all: {method : 'GET', params : {id: ''}},
     note: {method : 'GET', params: {}},
     newest: {method : 'GET', params : {id: 'newest'}},
     save: {method : 'POST', params: {id: ''}},
   })
 
-  return {
-    notes : Notes
-  }
+  # return promise with all notes
+  get_all_notes: () =>
+    return @note_resource.all().$promise.then (data) =>
+      return data['notes']
+
+  # return promise with the note
+  get_note: (guid) =>
+    return @note_resource.note({id: guid}).$promise.then (data) =>
+      return data.note
+
+  # return promise with saved note that is returned from remote
+  save_note: (guid, title, enml) =>
+    _post_data = {
+      guid: guid
+      title: title
+      enml: enml
+    }
+    return @note_resource.save(_post_data).$promise.then (data) =>
+      return data.note
 ]
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -932,13 +948,13 @@ markever.factory 'noteManager',
         return note
       else
         console.log('Local note fetch missed, fetch from remote: ' + guid)
-        return apiClient.notes.note({id: guid}).$promise.then (data) =>
+        return apiClient.get_note(guid).then (note) =>
           _note =
             guid: guid
-            title: data.note.title
-            md: data.note.md
+            title: note.title
+            md: note.md
             status: @NOTE_STATUS.SYNCED_ALL
-            resources: data.note.resources
+            resources: note.resources
           return @update_note(_note)
 
   # ------------------------------------------------------------
@@ -947,8 +963,8 @@ markever.factory 'noteManager',
   # ------------------------------------------------------------
   load_remote_notes: =>
     # TODO handle failure
-    return apiClient.notes.all().$promise.then (data) =>
-      @_merge_remote_notes(data['notes']).then(
+    return apiClient.get_all_notes().then (notes) =>
+      @_merge_remote_notes(notes).then(
         () =>
           console.log('finish merging remote notes')
           return @get_all_notes()
@@ -1080,21 +1096,18 @@ markever.factory 'noteManager',
   sync_up_note: (is_new_note, guid, jq_div, md) =>
     console.log('enter sync_up_note() for note ' + guid)
     return enmlRenderer.get_enml_and_title_promise(jq_div, md).then (enml_and_title) =>
-      _post_data = {
-        title: enml_and_title.title
-        enml: enml_and_title.enml
-      }
+      title = enml_and_title.title
+      enml = enml_and_title.enml
+      request_guid = guid
       if is_new_note
-        _post_data['guid'] = ''
-      else
-        _post_data['guid'] = guid
-      return apiClient.notes.save(_post_data).$promise.then(
-        (data) =>
+        request_guid = ''
+      return apiClient.save_note(request_guid, title, enml).then(
+        (note) =>
           # change note status to SYNCED_ALL, using old guid
           p = @update_note({guid: guid, status: @NOTE_STATUS.SYNCED_ALL}).then () =>
             # then update guid if is new note (when saving new note, tmp guid will be updated to real one)
             if is_new_note
-              new_guid = data.note.guid
+              new_guid = note.guid
               # @update_note_guid will return Promise containing the updated note
               return @update_note_guid(guid, new_guid)
             else
