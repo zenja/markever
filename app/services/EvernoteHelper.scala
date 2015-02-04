@@ -39,6 +39,10 @@ class EvernoteHelper(val token: String) {
   // Set up the NoteStore client
   val noteStore = factory.createNoteStoreClient()
 
+  // -------------------------------------------------------------------------------------------------------------------
+  // -- Notes
+  // -------------------------------------------------------------------------------------------------------------------
+
   def searchNotes(query: String,
                   offset: Integer,
                   maxNotes: Integer,
@@ -143,6 +147,13 @@ class EvernoteHelper(val token: String) {
     }
     val createdNote: Note = noteStore.createNote(note)
     createdNote
+  }
+
+  // -------------------------------------------------------------------------------------------------------------------
+  // -- Notebooks
+  // -------------------------------------------------------------------------------------------------------------------
+  def allNotebooks() : List[Notebook] = {
+    noteStore.listNotebooks().asScala.toList
   }
 
   // -------------------------------------------------------------------------------------------------------------------

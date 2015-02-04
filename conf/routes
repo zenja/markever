@@ -3,29 +3,32 @@
 # ~~~~
 
 # Home page
-GET     /                           controllers.Application.index
+GET         /                           controllers.Application.index
 
 # OAuth testing page
-GET     /start-oauth                controllers.Application.start_oauth
+GET         /start-oauth                controllers.Application.start_oauth
 
 # Clear sessions
-GET     /clear                      controllers.Application.clear
+GET         /clear                      controllers.Application.clear
 
 # Map static files
-GET     /javascripts/*file          controllers.Assets.at(path="/public/javascripts", file)
-GET     /images/*file               controllers.Assets.at(path="/public/images", file)
-GET     /stylesheets/*file          controllers.Assets.at(path="/public/stylesheets", file)
-GET     /fonts/*file                controllers.Assets.at(path="/public/fonts", file)
+GET         /javascripts/*file          controllers.Assets.at(path="/public/javascripts", file)
+GET         /images/*file               controllers.Assets.at(path="/public/images", file)
+GET         /stylesheets/*file          controllers.Assets.at(path="/public/stylesheets", file)
+GET         /fonts/*file                controllers.Assets.at(path="/public/fonts", file)
 
 # OAuth to Evernote
-GET     /authenticate               controllers.Evernote.authenticate
-GET     /auth                       controllers.Evernote.authenticate
+GET         /authenticate               controllers.Evernote.authenticate
+GET         /auth                       controllers.Evernote.authenticate
 
 # Play with Evernote
-GET     /play-evernote              controllers.Application.play_evernote
+GET         /play-evernote              controllers.Application.play_evernote
 
 # Service APIs
-GET     /api/v1/notes               controllers.Evernote.allNotes
-GET     /api/v1/notes/newest        controllers.Evernote.newestNote
-GET     /api/v1/notes/:guid         controllers.Evernote.getNote(guid: String)
-POST    /api/v1/notes               controllers.Evernote.updateNote
+## note
+GET         /api/v1/notes               controllers.Evernote.allNotes
+GET         /api/v1/notes/newest        controllers.Evernote.newestNote
+GET         /api/v1/notes/:guid         controllers.Evernote.getNote(guid: String)
+POST        /api/v1/notes               controllers.Evernote.updateNote
+## notebook
+GET         /api/v1/notebooks           controllers.Evernote.allNotebooks

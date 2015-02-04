@@ -132,7 +132,7 @@ object Evernote extends Controller {
         // TODO handle other exceptions
         case ex: Throwable => {
           // return error message
-          val jsonResult = Json.obj("status" -> "ERROR", "msg" -> ("Failed to create the note: " + ex.toString))
+          val jsonResult = Json.obj("status" -> "ERROR", "msg" -> ("Failed to get all notes: " + ex.toString))
           InternalServerError(jsonResult)
         }
       }
@@ -213,6 +213,34 @@ object Evernote extends Controller {
         case ex: Throwable => {
           // return error message
           val jsonResult = Json.obj("status" -> "ERROR", "msg" -> ("Failed to fetch the newest note: " + ex.toString))
+          InternalServerError(jsonResult)
+        }
+      }
+    } else {
+      // token info missing, re-auth required
+      val jsonResult = Json.obj("status" -> "AUTH_REQUIRED")
+      Forbidden(jsonResult)
+    }
+  }
+
+  def allNotebooks = Action { implicit request =>
+    if (tokenExists(request.session)) {
+      val token: String = request.session.get("token").get
+      val evernoteHelper = new EvernoteHelper(token = token)
+      try {
+        val notebooks : List[Notebook] = evernoteHelper.allNotebooks()
+        var notebooksJsonArr = Json.arr()
+        for (nb <- notebooks) {
+          // FIXME avoid creating lots of new obj
+          notebooksJsonArr = notebooksJsonArr.append(Json.obj("name" -> nb.getName, "guid" -> nb.getGuid))
+        }
+        val jsonResult = Json.obj("status" -> "SUCCESS", "notebooks" -> notebooksJsonArr)
+        Ok(jsonResult)
+      } catch {
+        // TODO handle other exceptions
+        case ex: Throwable => {
+          // return error message
+          val jsonResult = Json.obj("status" -> "ERROR", "msg" -> ("Failed to get all notebooks: " + ex.toString))
           InternalServerError(jsonResult)
         }
       }
