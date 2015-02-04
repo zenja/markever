@@ -10,9 +10,10 @@ markever.controller 'EditorController',
   vm = this
 
   # ------------------------------------------------------------------------------------------------------------------
-  # Model for note list
+  # Models
   # ------------------------------------------------------------------------------------------------------------------
   vm.note_list = []
+  vm.notebook_list = []
 
   # ------------------------------------------------------------------------------------------------------------------
   # Debugging methods
@@ -55,6 +56,9 @@ markever.controller 'EditorController',
 
     # get note list
     noteManager.fetch_note_list()
+
+    # get notebook list
+    noteManager.fetch_notebook_list()
 
     # take effect the settings
     vm.set_keyboard_handler(vm.current_keyboard_handler)
@@ -115,6 +119,9 @@ markever.controller 'EditorController',
 
   noteManager.on_note_list_changed (note_list) ->
     vm.note_list = note_list
+
+  noteManager.on_notebook_list_changed (notebook_list) ->
+    vm.notebook_list = notebook_list
 
 
   # ------------------------------------------------------------------------------------------------------------------
@@ -501,10 +508,14 @@ markever.factory 'scrollSyncor', ->
 # ----------------------------------------------------------------------------------------------------------------------
 markever.factory 'apiClient', ['$resource', ($resource) -> new class APIClient
   note_resource: $resource('/api/v1/notes/:id', {id: '@id'}, {
-    all: {method : 'GET', params : {id: ''}},
-    note: {method : 'GET', params: {}},
-    newest: {method : 'GET', params : {id: 'newest'}},
-    save: {method : 'POST', params: {id: ''}},
+    all: {method : 'GET', params : {id: ''}}
+    note: {method : 'GET', params: {}}
+    newest: {method : 'GET', params : {id: 'newest'}}
+    save: {method : 'POST', params: {id: ''}}
+  })
+
+  notebook_resource: $resource('/api/v1/notebooks/:id', {id: '@id'}, {
+    all: {method: 'GET', params: {id: ''}}
   })
 
   # return promise with all notes
@@ -526,6 +537,10 @@ markever.factory 'apiClient', ['$resource', ($resource) -> new class APIClient
     }
     return @note_resource.save(_post_data).$promise.then (data) =>
       return data.note
+
+  get_all_notebooks: () =>
+    return @notebook_resource.all().$promise.then (data) =>
+      return data['notebooks']
 ]
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -847,7 +862,6 @@ markever.factory 'noteManager',
     @note_list = note_list
     @note_list_changed(note_list)
 
-  # i.e. vm.refresh_remote_notes
   # FIXME: delete previous comment when refactor is done
   fetch_note_list: =>
     @load_remote_notes().then(
@@ -862,6 +876,23 @@ markever.factory 'noteManager',
     p = @get_all_notes().then (notes) =>
       @_set_note_list(notes)
     p.catch (error) => alert('reload_local_note_list() failed:' + error)
+
+  # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Notebook List >
+
+  notebook_list: []
+
+  _set_notebook_list: (notebook_list) =>
+    @notebook_list = notebook_list
+    @notebook_list_changed(notebook_list)
+
+  fetch_notebook_list: =>
+    @load_remote_notebooks().then(
+      (notebooks) =>
+        console.log('fetch_notebook_list() result: ' + JSON.stringify(notebooks))
+        @_set_notebook_list(notebooks)
+      (error) =>
+        alert('fetch_notebook_list() failed: ' + JSON.stringify(error))
+    )
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Event System >
 
@@ -931,6 +962,16 @@ markever.factory 'noteManager',
     for l in @note_load_finished_listeners
       l(is_success, guid, error)
 
+  # ------------------------------------------------------------
+  # Event: a note finished loading (either success or fail)
+  # ------------------------------------------------------------
+  notebook_list_changed_listeners: []
+  on_notebook_list_changed: (listener) =>
+    @notebook_list_changed_listeners.push(listener)
+  notebook_list_changed: (notebook_list) =>
+    for l in @notebook_list_changed_listeners
+      l(notebook_list)
+
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Remote Operations >
 
   # ------------------------------------------------------------
@@ -972,6 +1013,15 @@ markever.factory 'noteManager',
           # TODO pass error on
           alert('_merge_remote_notes() failed!')
       )
+
+  # ------------------------------------------------------------
+  # Load remote notebook list (only name and guid) to update local notebooks info
+  # return: promise
+  # ------------------------------------------------------------
+  load_remote_notebooks: =>
+    # TODO handle failure
+    return apiClient.get_all_notebooks().then (notebooks) =>
+      return notebooks
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Merge/Sync Operations >
 
@@ -1064,9 +1114,11 @@ markever.factory 'noteManager',
         console.log('is NOT Promise!!')
     return Promise.all(must_finish_promise_list)
 
+  # ------------------------------------------------------------
   # Params:
   #   jq_div: jQuery div element for rendering
   #   one_note_synced_func: function called whenever a note is successfully synced up
+  # ------------------------------------------------------------
   sync_up_all_notes: (jq_div) =>
     p = @get_all_notes().then (notes) =>
       _must_finish_promise_list = []
@@ -1092,7 +1144,9 @@ markever.factory 'noteManager',
       trace = printStackTrace({e: error})
       alert('sync_up_all_notes() failed\n' + 'Message: ' + error.message + '\nStack trace:\n' + trace.join('\n'))
 
+  # ------------------------------------------------------------
   # return Promise containing the synced note
+  # ------------------------------------------------------------
   sync_up_note: (is_new_note, guid, jq_div, md) =>
     console.log('enter sync_up_note() for note ' + guid)
     return enmlRenderer.get_enml_and_title_promise(jq_div, md).then (enml_and_title) =>
