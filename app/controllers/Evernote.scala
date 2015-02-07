@@ -82,6 +82,7 @@ object Evernote extends Controller {
     mapping(
       // guid is option: when creating new note guid is not needed
       "guid" -> text,
+      "notebookGuid" -> text,
       "title" -> nonEmptyText,
       "enml" -> nonEmptyText
     )(NoteModel.apply)(NoteModel.unapply)
@@ -94,11 +95,15 @@ object Evernote extends Controller {
       val evernoteHelper = new EvernoteHelper(token = token)
       try {
         val note = evernoteHelper.updateNote(
+          guid = noteFormData.guid,
+          notebookGuid = noteFormData.notebookGuid,
           title = noteFormData.title,
-          enmlNotTransformed = noteFormData.enml,
-          guid = noteFormData.guid
+          enmlNotTransformed = noteFormData.enml
         )
-        val jsonResult = Json.obj("status" -> "SUCCESS", "note" -> Json.obj("guid" -> note.getGuid))
+        val jsonResult = Json.obj(
+          "status" -> "SUCCESS",
+          "note" -> Json.obj("guid" -> note.getGuid, "notebook_guid" -> note.getNotebookGuid)
+        )
         Created(jsonResult)
       } catch {
         // TODO handle other exceptions
@@ -124,7 +129,11 @@ object Evernote extends Controller {
         var notesJsonArr = Json.arr()
         for (note <- notes) {
           // FIXME avoid creating lots of new obj
-          notesJsonArr = notesJsonArr.append(Json.obj("title" -> note.getTitle, "guid" -> note.getGuid))
+          notesJsonArr = notesJsonArr.append(Json.obj(
+            "title" -> note.getTitle,
+            "guid" -> note.getGuid,
+            "notebook_guid" -> note.getNotebookGuid)
+          )
         }
         val jsonResult = Json.obj("status" -> "SUCCESS", "notes" -> notesJsonArr)
         Ok(jsonResult)
@@ -153,16 +162,19 @@ object Evernote extends Controller {
           case Some(n) => {
             // make resources data
             val resourceInfoList = new ListBuffer[JsObject]
-            for (r <- n.getResources) {
-              val uuid = EvernoteHelper.getUUID(r)
-              val dataURL = EvernoteHelper.makeDataURL(r)
-              resourceInfoList.append(Json.obj("uuid" -> uuid, "data_url" -> dataURL))
+            if (n.getResources != null) {
+              for (r <- n.getResources) {
+                val uuid = EvernoteHelper.getUUID(r)
+                val dataURL = EvernoteHelper.makeDataURL(r)
+                resourceInfoList.append(Json.obj("uuid" -> uuid, "data_url" -> dataURL))
+              }
             }
             val jsonResult = Json.obj(
               "status" -> "SUCCESS",
               "note" -> Json.obj(
-                "title" -> n.getTitle,
                 "guid" -> n.getGuid,
+                "notebook_guid" -> n.getNotebookGuid,
+                "title" -> n.getTitle,
                 "md" -> EvernoteHelper.getMarkdownInENML(n.getContent),
                 "resources" -> JsArray(resourceInfoList)
               )

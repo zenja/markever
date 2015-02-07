@@ -529,9 +529,10 @@ markever.factory 'apiClient', ['$resource', ($resource) -> new class APIClient
       return data.note
 
   # return promise with saved note that is returned from remote
-  save_note: (guid, title, enml) =>
+  save_note: (guid, notebook_guid, title, enml) =>
     _post_data = {
       guid: guid
+      notebookGuid: notebook_guid
       title: title
       enml: enml
     }
@@ -560,6 +561,7 @@ markever.factory 'dbProvider', -> new class DBProvider
           indexes: {
             guid: {}
             title: {}
+            notebook_guid: {}
             status: {}
             # no need to index md
             # md: {}
@@ -691,10 +693,11 @@ markever.factory 'noteManager',
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Current Note >
 
   current_note:
-    guid: ""
-    title: ""
+    guid: ''
+    title: ''
     status: null
-    md: ""
+    md: ''
+    notebook_guid: ''
     _is_dirty: false
 
   # ------------------------------------------------------------
@@ -713,6 +716,9 @@ markever.factory 'noteManager',
   get_current_note_md: =>
     return @current_note.md
 
+  get_current_note_notebook_guid: =>
+    return @current_note.notebook_guid
+
   # ------------------------------------------------------------
   # Private accessor for current_note
   # ------------------------------------------------------------
@@ -723,11 +729,11 @@ markever.factory 'noteManager',
   _set_current_note_dirty: (is_dirty) =>
     @current_note._is_dirty = is_dirty
 
-  _switch_current_note: (guid, title, md, status) =>
+  _switch_current_note: (guid, notebook_guid, title, md, status) =>
     console.log('_switch_current_note(...) invoked')
-    if guid?
-      @_set_current_note_guid(guid)
-      @current_note_switched(guid)
+    @_set_current_note_guid(guid)
+    if notebook_guid?
+      @_set_current_note_notebook_guid(notebook_guid)
     if title?
       @_set_current_note_title(title)
     if md?
@@ -735,6 +741,8 @@ markever.factory 'noteManager',
         @_set_current_note_md(md)
     if status?
       @_set_current_note_status(status)
+    # notify event after current note changed
+    @current_note_switched(guid)
 
   _set_current_note_guid: (guid) =>
     @current_note.guid = guid
@@ -756,6 +764,10 @@ markever.factory 'noteManager',
     @current_note.status = status
     @reload_local_note_list()
 
+  _set_current_note_notebook_guid: (notebook_guid) =>
+    @current_note.notebook_guid = notebook_guid
+    @reload_local_note_list()
+
   # ------------------------------------------------------------
   # Other Operations for Current Note
   # ------------------------------------------------------------
@@ -773,6 +785,7 @@ markever.factory 'noteManager',
       enmlRenderer.get_title_promise($('#md_html_div_hidden'), @get_current_note_md()).then (title) =>
         note_info =
           guid: @get_current_note_guid()
+          notebook_guid: @get_current_note_notebook_guid()
           title: title
           md: @get_current_note_md()
           status: @get_current_note_status()
@@ -801,7 +814,7 @@ markever.factory 'noteManager',
         console.log('no valid previous current note found. create new note')
         @make_new_note().then(
           (note) =>
-            @_switch_current_note(note.guid, note.title, note.md, @NOTE_STATUS.NEW)
+            @_switch_current_note(note.guid, note.notebook_guid, note.title, note.md, @NOTE_STATUS.NEW)
             console.log('New note made: ' + JSON.stringify(note))
           (error) =>
             alert('make_new_note() failed: ' + error)
@@ -828,7 +841,7 @@ markever.factory 'noteManager',
           note.status == @NOTE_STATUS.MODIFIED)
             # note in db -> current note
             console.log('loading note ' + note.guid + ' with status ' + note.status + ' from local DB')
-            @_switch_current_note(note.guid, note.title, note.md, note.status)
+            @_switch_current_note(note.guid, note.notebook_guid, note.title, note.md, note.status)
             @note_load_finished(true, note.guid, null)
             console.log('loading note ' + note.guid + ' finished')
         if (note? == false) or (note.status == @NOTE_STATUS.SYNCED_META)
@@ -836,7 +849,7 @@ markever.factory 'noteManager',
           @fetch_remote_note(guid).then(
             (note) =>
               console.log('loading note ' + note.guid + ' with status ' + note.status + ' from remote')
-              @_switch_current_note(note.guid, note.title, note.md, note.status)
+              @_switch_current_note(note.guid, note.notebook_guid, note.title, note.md, note.status)
               @note_load_finished(true, note.guid, null)
               console.log('loading note ' + note.guid + ' finished')
               # updating note list
@@ -972,6 +985,19 @@ markever.factory 'noteManager',
     for l in @notebook_list_changed_listeners
       l(notebook_list)
 
+  # ------------------------------------------------------------
+  # Event: a note finished loading (either success or fail)
+  # ------------------------------------------------------------
+  new_note_made_listeners: []
+  on_new_note_made: (listener) =>
+    @new_note_made_listeners.push(listener)
+  new_note_made: () =>
+    console.log('refresh local note list due to new note made')
+    @reload_local_note_list()
+
+    for l in @new_note_made_listeners
+      l()
+
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Remote Operations >
 
   # ------------------------------------------------------------
@@ -992,6 +1018,7 @@ markever.factory 'noteManager',
         return apiClient.get_note(guid).then (note) =>
           _note =
             guid: guid
+            notebook_guid: note.notebook_guid
             title: note.title
             md: note.md
             status: @NOTE_STATUS.SYNCED_ALL
@@ -1042,6 +1069,7 @@ markever.factory 'noteManager',
       do (note_meta) =>
         guid = note_meta['guid']
         title = note_meta['title']
+        notebook_guid = note_meta['notebook_guid']
         console.log('Merging note [' + guid + ']')
 
         find_p = @find_note_by_guid(guid).then (note) =>
@@ -1051,6 +1079,7 @@ markever.factory 'noteManager',
             p = @add_note_meta({
               guid: guid
               title: title
+              notebook_guid: notebook_guid
             }).then () => console.log('note ' + guid + ' metadata added!')
             _find_p_must_finish_promise_list.push(p)
             console.log('pushed to _find_p_must_finish_promise_list. TAG: A')
@@ -1066,6 +1095,7 @@ markever.factory 'noteManager',
                 p = @update_note({
                   guid: guid
                   title: title
+                  notebook_guid: notebook_guid
                 })
                 _find_p_must_finish_promise_list.push(p)
                 console.log('pushed to _find_p_must_finish_promise_list. TAG: B')
@@ -1124,12 +1154,13 @@ markever.factory 'noteManager',
       _must_finish_promise_list = []
       for note in notes
         guid = note.guid
+        notebook_guid = note.notebook_guid
         md = note.md
 
         if note.status == @NOTE_STATUS.NEW || note.status == @NOTE_STATUS.MODIFIED
           is_new_note = (note.status == @NOTE_STATUS.NEW)
           console.log('note ' + guid + ' sent for sync up')
-          _p = @sync_up_note(is_new_note, guid, jq_div, md).then(
+          _p = @sync_up_note(is_new_note, guid, notebook_guid, jq_div, md).then(
             (synced_note) =>
               console.log('sync up note ' + guid + ' succeeded')
               @note_synced(true, guid, synced_note.guid, null)
@@ -1147,7 +1178,7 @@ markever.factory 'noteManager',
   # ------------------------------------------------------------
   # return Promise containing the synced note
   # ------------------------------------------------------------
-  sync_up_note: (is_new_note, guid, jq_div, md) =>
+  sync_up_note: (is_new_note, guid, notebook_guid, jq_div, md) =>
     console.log('enter sync_up_note() for note ' + guid)
     return enmlRenderer.get_enml_and_title_promise(jq_div, md).then (enml_and_title) =>
       title = enml_and_title.title
@@ -1155,11 +1186,17 @@ markever.factory 'noteManager',
       request_guid = guid
       if is_new_note
         request_guid = ''
-      return apiClient.save_note(request_guid, title, enml).then(
+      return apiClient.save_note(request_guid, notebook_guid, title, enml).then(
         (note) =>
-          # change note status to SYNCED_ALL, using old guid
-          p = @update_note({guid: guid, status: @NOTE_STATUS.SYNCED_ALL}).then () =>
-            # then update guid if is new note (when saving new note, tmp guid will be updated to real one)
+          # 1. change note status to SYNCED_ALL, using old guid
+          _modify =
+            guid: guid
+            status: @NOTE_STATUS.SYNCED_ALL
+          # 2. update notebook_guid if it is set a new one from remote
+          if notebook_guid != note.notebook_guid
+            _modify['notebook_guid'] = note.notebook_guid
+          p = @update_note(_modify).then () =>
+            # 3. update guid if is new note (when saving new note, tmp guid will be updated to real one)
             if is_new_note
               new_guid = note.guid
               # @update_note_guid will return Promise containing the updated note
@@ -1199,6 +1236,7 @@ markever.factory 'noteManager',
               guid: guid
               title: 'New Note'
               md: 'New Note\n==\n'
+              notebook_guid: ''
               status: @NOTE_STATUS.NEW
             })
         resolve(_false_p)
@@ -1228,16 +1266,6 @@ markever.factory 'noteManager',
         alert('error!')
     )
 
-  # fixme for debug
-  add_fake_note: () =>
-    dbProvider.get_db_server_promise().then (server) =>
-      server.notes.add({
-        guid: '9999-9999-9999-9999'
-        title: 'fake title'
-        status: @NOTE_STATUS.SYNCED_META
-      }).then () ->
-        alert('fake note added to db')
-
   # ------------------------------------------------------------
   # Return a copy of a note in db with a given guid
   #
@@ -1260,27 +1288,32 @@ markever.factory 'noteManager',
         return notes[0]
 
   # ------------------------------------------------------------
-  # Add a remote note's metadata which is not in local db to db
+  # Add a note's metadata which to db
   #
   # db server safe. will get db server itself
   # return: promise
   # ------------------------------------------------------------
   add_note_meta: (note) ->
-    console.log('Adding note to db - guid: ' + note.guid + ' title: ' + note.title)
+    console.log('Adding note to db - guid: ' + note.guid +
+      ' title: ' + note.title +
+      ' notebook_guid: ' + note.notebook_guid)
     return dbProvider.get_db_server_promise().then (server) =>
       return new Promise (resolve, reject) =>
         resolve(
           server.notes.add({
             guid: note.guid
             title: note.title
+            notebook_guid: note.notebook_guid
             status: @NOTE_STATUS.SYNCED_META
           })
         )
 
   # ------------------------------------------------------------
-  # Update a note
+  # Update a note, except for its guid
   #
   # db server safe. will get db server itself
+  # If need to update note's guid, please use update_note_guid()
+  #
   # return: promise
   # ------------------------------------------------------------
   update_note: (note) =>
@@ -1303,6 +1336,8 @@ markever.factory 'noteManager',
         _note_modify.title = note.title
       if note.md?
         _note_modify.md = note.md
+      if note.notebook_guid?
+        _note_modify.notebook_guid = note.notebook_guid
       if note.status?
         _note_modify.status = note.status
       _modify_p = dbProvider.get_db_server_promise().then (server) =>

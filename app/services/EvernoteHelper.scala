@@ -113,11 +113,15 @@ class EvernoteHelper(val token: String) {
   }
 
   // TODO only update title or content if changed
-  def updateNote(title: String, enmlNotTransformed: String, guid: String = "") : Note = {
+  def updateNote(title: String, notebookGuid: String, enmlNotTransformed: String, guid: String = "") : Note = {
     val (finalEnml, resourceList) = EvernoteHelper.transformImgToResource(enmlNotTransformed)
+    val _notebookGuid = notebookGuid.trim match {
+      case "" => noteStore.getDefaultNotebook.getGuid
+      case _ => notebookGuid
+    }
 
     if (guid.isEmpty) {
-      createNote(title, finalEnml, resourceList)
+      createNote(_notebookGuid, title, finalEnml, resourceList)
     } else {
       // TODO resources loading
       val note = getNote(guid, false, false)
@@ -130,15 +134,16 @@ class EvernoteHelper(val token: String) {
           }
           noteStore.updateNote(n)
         }
-        case None => createNote(title, finalEnml, resourceList)
+        case None => createNote(_notebookGuid, title, finalEnml, resourceList)
       }
     }
   }
 
-  def createNote(title: String, finalEnml: String, resourceList: List[Resource]) : Note = {
+  def createNote(notebookGuid: String, title: String, finalEnml: String, resourceList: List[Resource]) : Note = {
     val note = new Note()
     val noteAttribute = new NoteAttributes()
     noteAttribute.setSourceApplication(MarkeverConf.application_identifier)
+    note.setNotebookGuid(notebookGuid)
     note.setTitle(title)
     note.setContent(finalEnml)
     note.setAttributes(noteAttribute)
@@ -173,8 +178,9 @@ class EvernoteHelper(val token: String) {
   // test
   def tryCreateNote : Note = {
     val contentXmlStr = EvernoteHelper.wrapInENML("<div><p>This note is created by Scala code!</p></div>")
-    val newNote = updateNote(title = "Success!", enmlNotTransformed = contentXmlStr)
+    val newNote = updateNote(notebookGuid = "", title = "Success!", enmlNotTransformed = contentXmlStr)
     println("Successfully created a new note with GUID: " + newNote.getGuid)
+    println("Note's notebook GUID: " + newNote.getGuid)
     println("Note's source application: " + newNote.getAttributes.getSourceApplication)
     println
     newNote
@@ -195,7 +201,7 @@ class EvernoteHelper(val token: String) {
         .replaceAll("role=\"[^\"]*\"", "") +
       "</en-note>"
     println(content)
-    val newNote = createNote(title = "Rich note!", finalEnml = content, resourceList = List())
+    val newNote = createNote(notebookGuid = "", title = "Rich note!", finalEnml = content, resourceList = List())
     println("Successfully created a new note with GUID: " + newNote.getGuid);
     println
   }
