@@ -275,8 +275,10 @@ markever.controller 'EditorController',
     note_list = noteManager.get_note_list()
     notebook_list = noteManager.get_notebook_list()
     notebook_name_map = {}
+    notebook_collapse_map = {}
     for nb in notebook_list
       notebook_name_map[nb.guid] = nb.name
+      notebook_collapse_map[nb.guid] = true
     # key: notebook guid; value: Map{notebook_name: String, note_list: Array}
     note_group_list = {}
     for n in note_list
@@ -290,6 +292,8 @@ markever.controller 'EditorController',
             notebook_name: notebook_name_map[n.notebook_guid]
             note_list: []
       note_group_list[n.notebook_guid].note_list.push(n)
+    if not vm.notebook_collapse_map?
+      vm.notebook_collapse_map = notebook_collapse_map
     vm.note_group_list = note_group_list
     $('#note_list_div').modal({})
     # explicit return non-DOM result to avoid warning

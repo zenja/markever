@@ -166,6 +166,14 @@ html, body {
     overflow: scroll;
 }
 
+.notebook-item span {
+    margin-right: 10px;
+}
+
+.notebook-item a:hover {
+    text-decoration: none;
+}
+
 #note_list_div ul {
     overflow: scroll;
     list-style-type: none;

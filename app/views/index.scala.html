@@ -132,18 +132,27 @@
                 </button>
             </div>
             <div id="note_list_ul_div">
-                <div ng-repeat="note_group in main.note_group_list" collapse="false">
-                    <div class="notebook-item"><p>{{note_group.notebook_name}}</p></div>
-                    <ul class="note-list-ul">
-                        <li ng-repeat="note in note_group.note_list">
-                            <a href data-dismiss="modal" ng-click="main.load_note(note.guid)">
-                                {{note.title}}
-                                <span class="badge pull-right">
-                                    {{note.status == 0 ? 'NEW' : (note.status == 1 ? 'SYNCED_META': (note.status == 2 ? 'SYNCED_ALL' : (note.status == 3 ? 'MODIFIED' : 'INVALID')))}}
-                                </span>
-                            </a>
-                        </li>
-                    </ul>
+                <div ng-repeat="(notebook_guid, note_group) in main.note_group_list" collapse="false">
+                    <div class="notebook-item">
+                        <p>
+                            <a href="#" ng-click="main.notebook_collapse_map[notebook_guid] = !main.notebook_collapse_map[notebook_guid]">
+                            <span class="glyphicon glyphicon-book" aria-hidden="true"></span>{{note_group.notebook_name}}
+                            <span class="glyphicon glyphicon-chevron-right" aria-hidden="true" ng-show="main.notebook_collapse_map[notebook_guid]"></span>
+                            <span class="glyphicon glyphicon-chevron-down" aria-hidden="true" ng-show="!main.notebook_collapse_map[notebook_guid]"></span></a>
+                        </p>
+                    </div>
+                    <div collapse="main.notebook_collapse_map[notebook_guid]">
+                        <ul class="note-list-ul">
+                            <li ng-repeat="note in note_group.note_list">
+                                <a href data-dismiss="modal" ng-click="main.load_note(note.guid)">
+                                    {{note.title}}
+                                    <span class="badge pull-right">
+                                        {{note.status == 0 ? 'NEW' : (note.status == 1 ? 'SYNCED_META': (note.status == 2 ? 'SYNCED_ALL' : (note.status == 3 ? 'MODIFIED' : 'INVALID')))}}
+                                    </span>
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>
