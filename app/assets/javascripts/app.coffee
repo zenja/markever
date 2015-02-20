@@ -38,26 +38,21 @@ markever.controller 'EditorController',
   # Document ready
   # ------------------------------------------------------------------------------------------------------------------
   $document.ready ->
-    # load ace editor
-    $window.ace.config.set('basePath', '/javascripts/ace')
-    vm.ace_editor = $window.ace.edit("md_editor_div")
-    vm.ace_editor.renderer.setShowGutter(false)
-    vm.ace_editor.setShowPrintMargin(false)
-    vm.ace_editor.getSession().setMode("ace/mode/markdown")
-    vm.ace_editor.getSession().setUseWrapMode(true)
-    vm.ace_editor.setTheme('ace/theme/tomorrow_night_eighties')
-    vm.ace_editor.on 'change', vm.editor_content_changed
-    vm.ace_editor.focus()
+    # init ace editor
+    vm.init_ace_editor()
 
     # sync scroll
     scrollSyncor.syncScroll(vm.ace_editor, $('#md_html_div'))
 
     noteManager.init_current_note()
 
-    # get note list
+    # get note list from local
+    noteManager.reload_local_note_list()
+
+    # get note list from remote
     noteManager.fetch_note_list()
 
-    # get notebook list
+    # get notebook list from remote
     noteManager.fetch_notebook_list()
 
     # take effect the settings
@@ -70,6 +65,20 @@ markever.controller 'EditorController',
 
     # all ready
     vm.all_ready = true
+
+  # ------------------------------------------------------------------------------------------------------------------
+  # ace editor init
+  # ------------------------------------------------------------------------------------------------------------------
+  vm.init_ace_editor = ->
+    $window.ace.config.set('basePath', '/javascripts/ace')
+    vm.ace_editor = $window.ace.edit("md_editor_div")
+    vm.ace_editor.renderer.setShowGutter(false)
+    vm.ace_editor.setShowPrintMargin(false)
+    vm.ace_editor.getSession().setMode("ace/mode/markdown")
+    vm.ace_editor.getSession().setUseWrapMode(true)
+    vm.ace_editor.setTheme('ace/theme/tomorrow_night_eighties')
+    vm.ace_editor.on 'change', vm.editor_content_changed
+    vm.ace_editor.focus()
 
   # ------------------------------------------------------------------------------------------------------------------
   # ace editor event handlers
@@ -838,7 +847,7 @@ markever.factory 'noteManager',
   # ------------------------------------------------------------
   init_current_note: () =>
     previous_note_guid = localStorageService.get(@SETTINGS_KEY.CURRENT_NOTE_GUID)
-    if previous_note_guid? == false
+    if not previous_note_guid?
       previous_note_guid = "INVALID_GUID"
     p = @find_note_by_guid(previous_note_guid).then (note) =>
       if note?
@@ -887,13 +896,7 @@ markever.factory 'noteManager',
               @note_load_finished(true, note.guid, null)
               console.log('loading note ' + note.guid + ' finished')
               # updating note list
-              @get_all_notes().then(
-                (notes) =>
-                  console.log('updating note lists')
-                  @_set_note_list(notes)
-                (error) =>
-                  notifier.error('get_all_notes() failed in load_note(): ' + error)
-              )
+              @reload_local_note_list()
             (error) =>
               notifier.error('load note ' + guid + ' failed: ' + JSON.stringify(error))
               @note_load_finished(false, guid, new Error('load note ' + guid + ' failed: ' + JSON.stringify(error)))
