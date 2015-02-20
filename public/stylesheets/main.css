@@ -74,8 +74,7 @@ html, body {
     height: 100%;
     overflow: scroll;
     font-size: 13px;
-    font-family: Menlo, 'Ubuntu Mono', Consolas, source-code-pro, 'Courier New', Monaco, Cousine, Courier, SimSun, Song,
-        'Microsoft YaHei', YouYuan, Heiti, 'WenQuanYi Zen Hei Mono', 'WenQuanYi Zen Hei', monospace !important;
+    font-family: "Lucida Console", Monaco, monospace !important;
     line-height: 1.6;
 }
 
