@@ -3,10 +3,12 @@
 markever = angular.module('markever', ['ngResource', 'ui.bootstrap', 'LocalStorageModule', 'angularUUID2'])
 
 markever.controller 'EditorController',
-['$scope', '$window', '$document', '$http', '$sce', '$interval'
- 'localStorageService', 'enmlRenderer', 'scrollSyncor', 'apiClient', 'noteManager', 'imageManager', 'dbProvider'
+['$scope', '$window', '$document', '$http', '$sce', '$interval',
+ 'localStorageService', 'enmlRenderer', 'scrollSyncor', 'apiClient', 'noteManager', 'imageManager', 'dbProvider',
+ 'notifier',
 ($scope, $window, $document, $http, $sce, $interval
- localStorageService, enmlRenderer, scrollSyncor, apiClient, noteManager, imageManager, dbProvider) ->
+ localStorageService, enmlRenderer, scrollSyncor, apiClient, noteManager, imageManager, dbProvider,
+ notifier) ->
   vm = this
 
   # ------------------------------------------------------------------------------------------------------------------
@@ -89,10 +91,10 @@ markever.controller 'EditorController',
     if vm.saving_note == false
       vm.saving_note = true
       p = noteManager.sync_up_all_notes($('#md_html_div_hidden')).then () =>
-        alert('sync_up_all_notes() succeeded for all notes!')
+        notifier.success('sync_up_all_notes() succeeded for all notes!')
         vm.saving_note = false
       p.catch (error) =>
-          alert('vm.sync_up_all_notes() failed: ' + error)
+          notifier.error('vm.sync_up_all_notes() failed: ' + error)
           vm.saving_note = false
 
   # ------------------------------------------------------------------------------------------------------------------
@@ -100,7 +102,8 @@ markever.controller 'EditorController',
   # ------------------------------------------------------------------------------------------------------------------
   noteManager.on_current_note_md_modified (new_md) ->
     vm.ace_editor.setValue(new_md)
-    enmlRenderer.render_html($('#md_html_div'), new_md).catch (error) => alert('render error: ' + error)
+    enmlRenderer.render_html($('#md_html_div'), new_md).catch (error) =>
+      notifier.error('render error: ' + error)
     console.log('on_current_note_md_modified()')
 
   noteManager.on_current_note_switched (new_note_guid) ->
@@ -111,7 +114,7 @@ markever.controller 'EditorController',
     if is_success
       console.log('load note ' + guid + ' succeeded')
     else
-      alert('load note ' + guid + ' failed: ' + error)
+      notifier.error('load note ' + guid + ' failed: ' + error)
 
   noteManager.on_note_synced (is_success, old_guid, new_guid, error) ->
 
@@ -323,7 +326,7 @@ markever.controller 'EditorController',
 # ----------------------------------------------------------------------------------------------------------------------
 # Service: enmlRenderer
 # ----------------------------------------------------------------------------------------------------------------------
-markever.factory 'enmlRenderer', ['$window', 'imageManager', ($window, imageManager) ->
+markever.factory 'enmlRenderer', ['$window', 'imageManager', 'notifier', ($window, imageManager, notifier) ->
   render_html = (jq_html_div, md) ->
     processed_md = _md_pre_process(md)
     _html_dom = $('<div></div>')
@@ -333,7 +336,7 @@ markever.factory 'enmlRenderer', ['$window', 'imageManager', ($window, imageMana
         jq_html_div.empty()
         jq_html_div.append(_html_dom)
       (error) ->
-        alert('render_html() error: ' + error)
+        notifier.error('render_html() error: ' + error)
     )
 
   _md_pre_process = (md) ->
@@ -360,9 +363,9 @@ markever.factory 'enmlRenderer', ['$window', 'imageManager', ($window, imageMana
             $img.attr('longdesc', uuid)
             $img.attr('src', image.content)
         (error) =>
-          alert('_html_post_process() failed due to failure in imageManager.find_image_by_uuid(' + uuid + '): ' + error)
+          notifier.error('_html_post_process() failed due to failure in imageManager.find_image_by_uuid(' + uuid + '): ' + error)
       )
-      must_finish_promise_list.push(p.catch (error) -> alert('image replace failed: ' + error))
+      must_finish_promise_list.push(p.catch (error) -> notifier.error('image replace failed: ' + error))
     return Promise.all(must_finish_promise_list).then () -> return jq_tmp_div
 
 
@@ -566,6 +569,16 @@ markever.factory 'apiClient', ['$resource', ($resource) -> new class APIClient
 ]
 
 # ----------------------------------------------------------------------------------------------------------------------
+# Service: notifier
+# ----------------------------------------------------------------------------------------------------------------------
+markever.factory 'notifier', -> new class Notifier
+  success: (msg) ->
+    $.bootstrapGrowl(msg, {type: 'success'})
+
+  error: (msg) ->
+    $.bootstrapGrowl(msg, {type: 'danger'})
+
+# ----------------------------------------------------------------------------------------------------------------------
 # Service: dbProvider
 # ----------------------------------------------------------------------------------------------------------------------
 markever.factory 'dbProvider', -> new class DBProvider
@@ -676,8 +689,8 @@ markever.factory 'imageManager', ['uuid2', 'dbProvider', (uuid2, dbProvider) -> 
 # Service: noteManager
 # ----------------------------------------------------------------------------------------------------------------------
 markever.factory 'noteManager',
-['$interval', 'uuid2', 'localStorageService', 'dbProvider', 'apiClient', 'imageManager', 'enmlRenderer',
-($interval, uuid2, localStorageService, dbProvider, apiClient, imageManager, enmlRenderer) -> new class NoteManager
+['$interval', 'uuid2', 'localStorageService', 'dbProvider', 'apiClient', 'imageManager', 'enmlRenderer', 'notifier',
+($interval, uuid2, localStorageService, dbProvider, apiClient, imageManager, enmlRenderer, notifier) -> new class NoteManager
 
   #---------------------------------------------------------------------------------------------------------------------
   # Status of a note:
@@ -817,8 +830,8 @@ markever.factory 'noteManager',
             @reload_local_note_list()
             @_set_current_note_dirty(false)
           (error) =>
-            alert('update note failed in save_current_note_to_db(): ' + JSON.stringify(error))
-        ).catch (error) => alert('failed to save current note to db: ' + error)
+            notifier.error('update note failed in save_current_note_to_db(): ' + JSON.stringify(error))
+        ).catch (error) => notifier.error('failed to save current note to db: ' + error)
 
   # ------------------------------------------------------------
   # load previous note if exists, otherwise make a new note and set it current note
@@ -838,11 +851,11 @@ markever.factory 'noteManager',
             @_switch_current_note(note.guid, note.notebook_guid, note.title, note.md, @NOTE_STATUS.NEW)
             console.log('New note made: ' + JSON.stringify(note))
           (error) =>
-            alert('make_new_note() failed: ' + error)
+            notifier.error('make_new_note() failed: ' + error)
         ).catch (error) =>
           trace = printStackTrace({e: error})
-          alert('Error, make new note failed!\n' + 'Message: ' + error.message + '\nStack trace:\n' + trace.join('\n'))
-    p.catch (error) => alert('load previous current note failed: ' + error)
+          notifier.error('Error, make new note failed!\n' + 'Message: ' + error.message + '\nStack trace:\n' + trace.join('\n'))
+    p.catch (error) => notifier.error('load previous current note failed: ' + error)
 
   # ------------------------------------------------------------
   # Load a note by guid as current note
@@ -879,14 +892,14 @@ markever.factory 'noteManager',
                   console.log('updating note lists')
                   @_set_note_list(notes)
                 (error) =>
-                  alert('get_all_notes() failed in load_note(): ' + error)
+                  notifier.error('get_all_notes() failed in load_note(): ' + error)
               )
             (error) =>
-              alert('load note ' + guid + ' failed: ' + JSON.stringify(error))
+              notifier.error('load note ' + guid + ' failed: ' + JSON.stringify(error))
               @note_load_finished(false, guid, new Error('load note ' + guid + ' failed: ' + JSON.stringify(error)))
           )
       p.catch (error) =>
-        alert('find_note_by_guid() itself or then() failed in load_note(): ' + JSON.stringify(error))
+        notifier.error('find_note_by_guid() itself or then() failed in load_note(): ' + JSON.stringify(error))
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Note List >
 
@@ -906,13 +919,13 @@ markever.factory 'noteManager',
         console.log('fetch_note_list() result: ' + JSON.stringify(notes))
         @_set_note_list(notes)
       (error) =>
-        alert('fetch_note_list() failed: ' + JSON.stringify(error))
+        notifier.error('fetch_note_list() failed: ' + JSON.stringify(error))
     )
 
   reload_local_note_list: () =>
     p = @get_all_notes().then (notes) =>
       @_set_note_list(notes)
-    p.catch (error) => alert('reload_local_note_list() failed:' + error)
+    p.catch (error) => notifier.error('reload_local_note_list() failed:' + error)
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Notebook List >
 
@@ -931,7 +944,7 @@ markever.factory 'noteManager',
         console.log('fetch_notebook_list() result: ' + JSON.stringify(notebooks))
         @_set_notebook_list(notebooks)
       (error) =>
-        alert('fetch_notebook_list() failed: ' + JSON.stringify(error))
+        notifier.error('fetch_notebook_list() failed: ' + JSON.stringify(error))
     )
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Event System >
@@ -1065,7 +1078,7 @@ markever.factory 'noteManager',
           return @get_all_notes()
         (error) =>
           # TODO pass error on
-          alert('_merge_remote_notes() failed!')
+          notifier.error('_merge_remote_notes() failed!')
       )
 
   # ------------------------------------------------------------
@@ -1137,7 +1150,7 @@ markever.factory 'noteManager',
                     #_find_p_must_finish_promise_list.push(p)
                     #console.log('pushed to _find_p_must_finish_promise_list. TAG: C')
                   (error) =>
-                    alert('fetch note ' + guid + ' failed during _merge_remote_notes():' + JSON.stringify(error))
+                    notifier.error('fetch note ' + guid + ' failed during _merge_remote_notes():' + JSON.stringify(error))
                 )
 
               when @NOTE_STATUS.MODIFIED
@@ -1145,7 +1158,7 @@ markever.factory 'noteManager',
                 console.log('do nothing')
 
               else
-                alert('IMPOSSIBLE: no correct note status')
+                notifier.error('IMPOSSIBLE: no correct note status')
           return Promise.all(_find_p_must_finish_promise_list)
         must_finish_promise_list.push(find_p)
         console.log('pushed to must_finish_promise_list. TAG: D')
@@ -1192,7 +1205,7 @@ markever.factory 'noteManager',
               console.log('sync up note ' + guid + ' succeeded')
               @note_synced(true, guid, synced_note.guid, null)
             (error) =>
-              alert('sync up note ' + guid + ' failed: ' + JSON.stringify(error))
+              notifier.error('sync up note ' + guid + ' failed: ' + JSON.stringify(error))
               @note_synced(false, null, null, error)
           )
           _must_finish_promise_list.push(_p)
@@ -1200,7 +1213,7 @@ markever.factory 'noteManager',
 
     return p.catch (error) =>
       trace = printStackTrace({e: error})
-      alert('sync_up_all_notes() failed\n' + 'Message: ' + error.message + '\nStack trace:\n' + trace.join('\n'))
+      notifier.error('sync_up_all_notes() failed\n' + 'Message: ' + error.message + '\nStack trace:\n' + trace.join('\n'))
 
   # ------------------------------------------------------------
   # return Promise containing the synced note
@@ -1234,7 +1247,7 @@ markever.factory 'noteManager',
           console.log('sync_up_note(' + guid + ') succeed')
         (error) =>
           # set status back
-          alert('sync_up_note() failed: \n' + JSON.stringify(error))
+          notifier.error('sync_up_note() failed: \n' + JSON.stringify(error))
           throw error
       )
 
@@ -1271,7 +1284,7 @@ markever.factory 'noteManager',
         () =>
           return @find_note_by_guid(guid)
         (error) =>
-          alert('make_new_note() error!')
+          notifier.error('make_new_note() error!')
       )
       resolve(p)
 
@@ -1288,9 +1301,9 @@ markever.factory 'noteManager',
             server.notes.remove(note.id)
             console.log('local note ' + note.guid + ' deleted. id: ' + note.id)
           p.catch (error) =>
-            alert('delete_note(' + guid + ') failed')
+            notifier.error('delete_note(' + guid + ') failed')
       (error) =>
-        alert('error!')
+        notifier.error('error!')
     )
 
   # ------------------------------------------------------------
@@ -1346,7 +1359,7 @@ markever.factory 'noteManager',
   update_note: (note) =>
     console.log('update_note(' + note.guid + ') invoking')
     if note.guid? == false
-      alert('update_note(): note to be updated must have a guid!')
+      notifier.error('update_note(): note to be updated must have a guid!')
       return new Promise (resolve, reject) =>
         reject(new Error('update_note(): note to be updated must have a guid!'))
 
@@ -1354,7 +1367,7 @@ markever.factory 'noteManager',
     if note.resources?
       for r in note.resources
         imageManager.add_image(r.uuid, r.data_url).catch (error) =>
-          alert('add image failed! uuid: ' + r.uuid)
+          notifier.error('add image failed! uuid: ' + r.uuid)
         console.log("register uuid: " + r.uuid + " data len: " + r.data_url.length)
     # update notes db
     p = new Promise (resolve, reject) =>
@@ -1375,7 +1388,7 @@ markever.factory 'noteManager',
         console.log('update note ' + note.guid + ' successfully')
         return @find_note_by_guid(note.guid)
       (error) =>
-        alert('update note ' + note.guid + ' failed!')
+        notifier.error('update note ' + note.guid + ' failed!')
     )
 
   # return promise containing the updated note
@@ -1396,7 +1409,7 @@ markever.factory 'noteManager',
           @current_note_guid_modified(old_guid, new_guid)
         return @find_note_by_guid(new_guid)
       (error) =>
-        alert('update note guid ' + old_guid + ' to new guid ' + new_guid + ' failed: ' + error)
+        notifier.error('update note guid ' + old_guid + ' to new guid ' + new_guid + ' failed: ' + error)
     )
 
   # ------------------------------------------------------------
