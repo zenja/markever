@@ -52,6 +52,9 @@ markever.controller 'EditorController',
     # get note list from remote
     noteManager.fetch_note_list()
 
+    # get notebook list from local
+    noteManager.reload_local_notebook_list()
+
     # get notebook list from remote
     noteManager.fetch_notebook_list()
 
@@ -729,8 +732,9 @@ markever.factory 'noteManager',
     SYNCED_ALL: 2
     MODIFIED: 3
 
-  SETTINGS_KEY:
-    CURRENT_NOTE_GUID: 'note_manager.settings.current_note.guid'
+  STORAGE_KEY:
+    CURRENT_NOTE_GUID: 'note_manager.current_note.guid'
+    NOTEBOOK_LIST: 'note_manager.notebook_list'
 
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Current Note >
@@ -846,7 +850,7 @@ markever.factory 'noteManager',
   # load previous note if exists, otherwise make a new note and set it current note
   # ------------------------------------------------------------
   init_current_note: () =>
-    previous_note_guid = localStorageService.get(@SETTINGS_KEY.CURRENT_NOTE_GUID)
+    previous_note_guid = localStorageService.get(@STORAGE_KEY.CURRENT_NOTE_GUID)
     if not previous_note_guid?
       previous_note_guid = "INVALID_GUID"
     p = @find_note_by_guid(previous_note_guid).then (note) =>
@@ -939,7 +943,11 @@ markever.factory 'noteManager',
 
   _set_notebook_list: (notebook_list) =>
     @notebook_list = notebook_list
+    localStorageService.set(@STORAGE_KEY.NOTEBOOK_LIST, notebook_list)
     @notebook_list_changed(notebook_list)
+
+  reload_local_notebook_list: () =>
+    @_set_notebook_list(localStorageService.get(@STORAGE_KEY.NOTEBOOK_LIST))
 
   fetch_notebook_list: =>
     @load_remote_notebooks().then(
@@ -969,7 +977,7 @@ markever.factory 'noteManager',
   on_current_note_switched: (listener) =>
     @current_note_switched_listeners.push(listener)
   current_note_switched: (new_note_guid) =>
-    localStorageService.set(@SETTINGS_KEY.CURRENT_NOTE_GUID, new_note_guid)
+    localStorageService.set(@STORAGE_KEY.CURRENT_NOTE_GUID, new_note_guid)
 
     for l in @current_note_switched_listeners
       l(new_note_guid)
@@ -981,7 +989,7 @@ markever.factory 'noteManager',
   on_current_note_guid_modified: (listener) =>
     @current_note_guid_modified_listeners.push(listener)
   current_note_guid_modified: (old_guid, new_guid) =>
-    localStorageService.set(@SETTINGS_KEY.CURRENT_NOTE_GUID, new_guid)
+    localStorageService.set(@STORAGE_KEY.CURRENT_NOTE_GUID, new_guid)
 
     for l in @current_note_guid_modified_listeners
       l(old_guid, new_guid)
