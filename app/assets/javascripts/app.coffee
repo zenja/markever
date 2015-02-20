@@ -12,8 +12,6 @@ markever.controller 'EditorController',
   # ------------------------------------------------------------------------------------------------------------------
   # Models
   # ------------------------------------------------------------------------------------------------------------------
-  vm.note_list = []
-  vm.notebook_list = []
 
   # ------------------------------------------------------------------------------------------------------------------
   # Debugging methods
@@ -118,10 +116,8 @@ markever.controller 'EditorController',
   noteManager.on_note_synced (is_success, old_guid, new_guid, error) ->
 
   noteManager.on_note_list_changed (note_list) ->
-    vm.note_list = note_list
 
   noteManager.on_notebook_list_changed (notebook_list) ->
-    vm.notebook_list = notebook_list
 
 
   # ------------------------------------------------------------------------------------------------------------------
@@ -275,9 +271,30 @@ markever.controller 'EditorController',
   vm.open_note_list_modal = ->
     # clear search keyword
     vm.search_note_keyword = ''
+
+    note_list = noteManager.get_note_list()
+    notebook_list = noteManager.get_notebook_list()
+    notebook_name_map = {}
+    for nb in notebook_list
+      notebook_name_map[nb.guid] = nb.name
+    # key: notebook guid; value: Map{notebook_name: String, note_list: Array}
+    note_group_list = {}
+    for n in note_list
+      if not (n.notebook_guid of note_group_list)
+        if n.notebook_guid.trim() == ""
+          note_group_list[n.notebook_guid] =
+            notebook_name: 'Unspecified Notebook'
+            note_list: []
+        else
+          note_group_list[n.notebook_guid] =
+            notebook_name: notebook_name_map[n.notebook_guid]
+            note_list: []
+      note_group_list[n.notebook_guid].note_list.push(n)
+    vm.note_group_list = note_group_list
     $('#note_list_div').modal({})
     # explicit return non-DOM result to avoid warning
     return true
+
   # ------------------------------------------------------------------------------------------------------------------
   # toolbar
   # ------------------------------------------------------------------------------------------------------------------
@@ -871,6 +888,9 @@ markever.factory 'noteManager',
 
   note_list: []
 
+  get_note_list: =>
+    return @note_list
+
   _set_note_list: (note_list) =>
     @note_list = note_list
     @note_list_changed(note_list)
@@ -893,6 +913,9 @@ markever.factory 'noteManager',
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Notebook List >
 
   notebook_list: []
+
+  get_notebook_list: =>
+    return @notebook_list
 
   _set_notebook_list: (notebook_list) =>
     @notebook_list = notebook_list
