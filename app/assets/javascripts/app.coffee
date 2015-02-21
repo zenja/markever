@@ -44,6 +44,9 @@ markever.controller 'EditorController',
     # init ace editor
     vm.init_ace_editor()
 
+    # init ui
+    vm.init_ui()
+
     # sync scroll
     scrollSyncor.syncScroll(vm.ace_editor, $('#md_html_div'))
 
@@ -77,6 +80,14 @@ markever.controller 'EditorController',
 
     # all ready
     vm.all_ready = true
+
+  # ------------------------------------------------------------------------------------------------------------------
+  # UI Logic that has to be made by js
+  # ------------------------------------------------------------------------------------------------------------------
+  vm.init_ui = ->
+    # when showing note list which is a modal, make the backdrop to be transparent
+    $('#note_list_div').on 'show.bs.modal hidden.bs.modal', () ->
+      $('body').toggleClass('modal-backdrop-transparent')
 
   # ------------------------------------------------------------------------------------------------------------------
   # ace editor init

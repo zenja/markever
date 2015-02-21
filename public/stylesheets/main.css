@@ -140,7 +140,7 @@ html, body {
 #note_list_div>.modal-dialog {
     position: absolute;
     background-color: #fff;
-    left: 0;
+    left: 70px;
     top: 0;
     height: 100%;
     width: 350px;
@@ -148,8 +148,8 @@ html, body {
 }
 
 #note_list_div:not(.in) .modal-dialog {
-    -webkit-transform: translate3d(-25%, 0, 0);
-    transform: translate3d(-25%, 0, 0);
+    -webkit-transform: translate3d(-50%, 0, 0);
+    transform: translate3d(-50%, 0, 0);
 }
 
 #note_list_search_div {
@@ -204,4 +204,8 @@ html, body {
 #sync_note_list_btn {
     float: right;
     margin: 10px;
+}
+
+.modal-backdrop-transparent .modal-backdrop {
+    opacity: 0;
 }
