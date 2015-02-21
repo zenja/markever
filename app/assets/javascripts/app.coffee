@@ -641,10 +641,10 @@ markever.factory 'offlineStateManager', ['$window', 'notifier', ($window, notifi
         notifier.error('connection went down')
 
       $window.Offline.on 'reconnect:started', () =>
-        notifier.info('reconnecting started')
+        #notifier.info('reconnecting started')
 
       $window.Offline.on 'reconnect:stopped', () =>
-        notifier.info('reconnecting stopped')
+        #notifier.info('reconnecting stopped')
 
       $window.Offline.on 'reconnect:failure', () =>
         notifier.error('reconnecting failed')
