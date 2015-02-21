@@ -5,10 +5,10 @@ markever = angular.module('markever', ['ngResource', 'ui.bootstrap', 'LocalStora
 markever.controller 'EditorController',
 ['$scope', '$window', '$document', '$http', '$sce', '$interval',
  'localStorageService', 'enmlRenderer', 'scrollSyncor', 'apiClient', 'noteManager', 'imageManager', 'dbProvider',
- 'notifier',
+ 'notifier', 'offlineStateManager',
 ($scope, $window, $document, $http, $sce, $interval
  localStorageService, enmlRenderer, scrollSyncor, apiClient, noteManager, imageManager, dbProvider,
- notifier) ->
+ notifier, offlineStateManager) ->
   vm = this
 
   # ------------------------------------------------------------------------------------------------------------------
@@ -28,6 +28,9 @@ markever.controller 'EditorController',
   vm._debug_show_current_note_in_db = () ->
     noteManager.find_note_by_guid(vm.get_guid()).then (note) =>
       alert('current note (' + vm.get_guid() + ') in db is: ' + JSON.stringify(note))
+
+  vm._debug_offline_check = ->
+    $window.Offline.check()
 
   # ------------------------------------------------------------------------------------------------------------------
   # App ready status
@@ -50,13 +53,19 @@ markever.controller 'EditorController',
     noteManager.reload_local_note_list()
 
     # get note list from remote
-    noteManager.fetch_note_list()
+    if not offlineStateManager.is_offline()
+      noteManager.fetch_note_list()
+    else
+      console.log('offline mode, did not fetch note list from remote')
 
     # get notebook list from local
     noteManager.reload_local_notebook_list()
 
     # get notebook list from remote
-    noteManager.fetch_notebook_list()
+    if not offlineStateManager.is_offline()
+      noteManager.fetch_notebook_list()
+    else
+      console.log('offline mode, did not fetch notebook list from remote')
 
     # take effect the settings
     vm.set_keyboard_handler(vm.current_keyboard_handler)
@@ -95,11 +104,21 @@ markever.controller 'EditorController',
   # Operations for notes
   # ------------------------------------------------------------------------------------------------------------------
   vm.load_note = (guid) ->
-    if guid != noteManager.get_current_note_guid()
-      vm.open_loading_modal()
-      noteManager.load_note(guid)
+    if guid == noteManager.get_current_note_guid()
+      return
+
+    noteManager.is_note_loadable_locally_promise(guid).then (loadable_locally) ->
+      if not loadable_locally and offlineStateManager.is_offline()
+        notifier.info('Cannot load note in offline mode')
+      else
+        vm.open_loading_modal()
+        noteManager.load_note(guid)
 
   vm.sync_up_all_notes = ->
+    if offlineStateManager.is_offline()
+      notifier.info('Cannot sync up notes in offline mode')
+      return
+
     if vm.saving_note == false
       vm.saving_note = true
       p = noteManager.sync_up_all_notes($('#md_html_div_hidden')).then () =>
@@ -587,8 +606,55 @@ markever.factory 'notifier', -> new class Notifier
   success: (msg) ->
     $.bootstrapGrowl(msg, {type: 'success'})
 
+  info: (msg) ->
+    $.bootstrapGrowl(msg, {type: 'info'})
+
   error: (msg) ->
     $.bootstrapGrowl(msg, {type: 'danger'})
+
+# ----------------------------------------------------------------------------------------------------------------------
+# Service: offline state manager
+# ----------------------------------------------------------------------------------------------------------------------
+markever.factory 'offlineStateManager', ['$window', 'notifier', ($window, notifier) -> new class OfflineStateManager
+  constructor: ->
+    @initialized = false
+    @_is_offline = false
+    @_init()
+    $window.Offline.check()
+
+  _init: =>
+    if not @initialized
+      $window.Offline.on 'confirmed-up', () =>
+        @_is_offline = false
+        #notifier.success('connection up')
+
+      $window.Offline.on 'confirmed-down', () =>
+        @_is_offline = true
+        #notifier.error('connection down')
+
+      $window.Offline.on 'up', () =>
+        @_is_offline = false
+        notifier.success('connection restored')
+
+      $window.Offline.on 'down', () =>
+        @_is_offline = true
+        notifier.error('connection went down')
+
+      $window.Offline.on 'reconnect:started', () =>
+        notifier.info('reconnecting started')
+
+      $window.Offline.on 'reconnect:stopped', () =>
+        notifier.info('reconnecting stopped')
+
+      $window.Offline.on 'reconnect:failure', () =>
+        notifier.error('reconnecting failed')
+
+  is_offline: =>
+    return @_is_offline
+
+  check_connection: =>
+    $window.Offline.check()
+]
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Service: dbProvider
@@ -701,8 +767,10 @@ markever.factory 'imageManager', ['uuid2', 'dbProvider', (uuid2, dbProvider) -> 
 # Service: noteManager
 # ----------------------------------------------------------------------------------------------------------------------
 markever.factory 'noteManager',
-['$interval', 'uuid2', 'localStorageService', 'dbProvider', 'apiClient', 'imageManager', 'enmlRenderer', 'notifier',
-($interval, uuid2, localStorageService, dbProvider, apiClient, imageManager, enmlRenderer, notifier) -> new class NoteManager
+['$interval', 'uuid2', 'localStorageService',
+ 'dbProvider', 'apiClient', 'imageManager', 'enmlRenderer', 'notifier', 'offlineStateManager',
+($interval, uuid2, localStorageService,
+ dbProvider, apiClient, imageManager, enmlRenderer, notifier, offlineStateManager) -> new class NoteManager
 
   #---------------------------------------------------------------------------------------------------------------------
   # Status of a note:
@@ -876,7 +944,7 @@ markever.factory 'noteManager',
   # If note is SYNCED_ALL in local, just load it from local
   # otherwise fetch the note content from remote
   #
-  # Return:
+  # Return: not used
   # ------------------------------------------------------------
   load_note: (guid) =>
     # check if the note to be loaded is already current note
@@ -907,6 +975,27 @@ markever.factory 'noteManager',
           )
       p.catch (error) =>
         notifier.error('find_note_by_guid() itself or then() failed in load_note(): ' + JSON.stringify(error))
+
+  # ------------------------------------------------------------
+  # Check if a note is loadable from local
+  #
+  # The logic is consistent with the first part of load_note(guid)
+  #
+  # Return: promise with a boolean value
+  # ------------------------------------------------------------
+  is_note_loadable_locally_promise: (guid) =>
+    if guid == @get_current_note_guid()
+      return new Promise (resolve, reject) =>
+        resolve(true)
+
+    return @find_note_by_guid(guid).then (note) =>
+      if note? and
+        (note.status == @NOTE_STATUS.NEW or
+          note.status == @NOTE_STATUS.SYNCED_ALL or
+          note.status == @NOTE_STATUS.MODIFIED)
+        return true
+      else
+        return false
 
   # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~| Note List >
 
